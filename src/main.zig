@@ -18,8 +18,6 @@ pub fn main() anyerror!void {
         .projection = .perspective,
     };
 
-    var y: i32 = 200;
-    var hue: f32 = 0.0;
     var seconds: f32 = 0.0;
 
     // Load Shader (Vertex = null ใช้ตัวตั้งต้น, Fragment = ไฟล์ที่เราสร้าง)
@@ -33,10 +31,6 @@ pub fn main() anyerror!void {
         const dt = rl.getFrameTime();
         seconds += dt;
 
-        y += 1;
-        hue += 1.0;
-        if (y > screenHeight) y = -20;
-
         // ส่งค่า seconds ไปที่ Shader
         rl.setShaderValue(shader, seconds_loc, &seconds, .float);
         rl.updateCamera(&camera, .orbital);
@@ -46,7 +40,7 @@ pub fn main() anyerror!void {
             rl.beginDrawing();
             defer rl.endDrawing();
 
-            rl.clearBackground(rl.Color.fromHSV(hue, 0.5, 0.5));
+            rl.clearBackground(.black);
 
             // --- LAYER 1: 3D WORLD ---
             {
@@ -57,19 +51,7 @@ pub fn main() anyerror!void {
                 rl.drawCubeWires(.{ .x = 0, .y = 0.5, .z = 0 }, 1.1, 1.1, 1.1, .white);
             }
 
-            // --- LAYER 2: 2D OVERLAY (UI) ---
-            {
-                rl.beginShaderMode(shader);
-                defer rl.endShaderMode();
-                rl.drawTriangle(
-                    .{ .x = 400, .y = 100 },
-                    .{ .x = 300, .y = 300 },
-                    .{ .x = 500, .y = 300 },
-                    rl.Color.gold.fade(0.5),
-                );
-            }
-
-            rl.drawText("Congrats! Krist\nHybrid 2D + 3D!", 10, y, 20, .white);
+            rl.drawText("Congrats! Krist\nHybrid 2D + 3D!", 10, 40, 20, .white);
             rl.drawFPS(10, 10);
         }
     }
