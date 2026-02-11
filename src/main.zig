@@ -3,6 +3,10 @@ const rl = @import("raylib");
 const zphy = @import("zphysics");
 const zm = @import("zmath");
 
+const X = zm.Vec{ 1, 0, 0, 0 };
+const Y = zm.Vec{ 0, 1, 0, 0 };
+const Z = zm.Vec{ 0, 0, 1, 0 };
+
 // --- Physics Configuration ---
 const object_layers = struct {
     const non_moving: zphy.ObjectLayer = 0;
@@ -99,11 +103,11 @@ const Player = struct {
             .motion_type = .dynamic,
             .object_layer = object_layers.moving,
             // .allowed_DOFs = 0b010111,
-            .allowed_DOFs = @enumFromInt(0 |
-                @intFromEnum(zphy.AllowedDOFs.translation_x) |
+            .allowed_DOFs = @enumFromInt(@intFromEnum(zphy.AllowedDOFs.translation_x) |
                 @intFromEnum(zphy.AllowedDOFs.translation_y) |
                 @intFromEnum(zphy.AllowedDOFs.translation_z) |
-                @intFromEnum(zphy.AllowedDOFs.rotation_y)),
+                0 // @intFromEnum(zphy.AllowedDOFs.rotation_y)
+            ),
         }, .activate) catch unreachable;
 
         return Player{
@@ -119,7 +123,7 @@ const Player = struct {
         const turn_input = (if (rl.isKeyDown(.a)) turnSpeed else 0.0) - (if (rl.isKeyDown(.d)) turnSpeed else 0.0);
         if (turn_input != 0) {
             const current_q = self.ref.rotation();
-            const dq = zm.quatFromAxisAngle(zm.f32x4(0, 1, 0, 0), turn_input * dt);
+            const dq = zm.quatFromAxisAngle(Y, turn_input * dt);
             const new_q = zm.qmul(dq, current_q); // Rotate around world Y
             self.ref.interface.setRotation(self.ref.body_id, zm.vecToArr4(new_q), .activate);
         }
@@ -127,7 +131,7 @@ const Player = struct {
         const walk_dist = (if (rl.isKeyDown(.w)) moveSpeed else 0.0) - (if (rl.isKeyDown(.s)) moveSpeed else 0.0);
 
         // Compute forward from current rotation
-        const forward = zm.rotate(self.ref.rotation(), zm.f32x4(0, 0, 1, 0));
+        const forward = zm.rotate(self.ref.rotation(), Z);
         const current_vel = self.ref.velocity();
 
         self.ref.interface.setLinearVelocity(self.ref.body_id, .{ forward[0] * walk_dist, current_vel[1], forward[2] * walk_dist });
@@ -153,7 +157,7 @@ const Player = struct {
         rl.gl.rlTranslatef(p[0], p[1], p[2]);
 
         var angle_val: f32 = 0;
-        var axis = zm.f32x4(0, 1, 0, 0);
+        var axis: zm.Vec = undefined;
         zm.quatToAxisAngle(q, &axis, &angle_val);
         rl.gl.rlRotatef(angle_val * 180.0 / std.math.pi, axis[0], axis[1], axis[2]);
 
