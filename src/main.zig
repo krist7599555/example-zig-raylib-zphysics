@@ -1,24 +1,24 @@
 const rl = @import("raylib");
 const std = @import("std");
-const Vec3 = rl.Vector3;
-const Vec2 = rl.Vector2;
+const zphy = @import("zphysics");
+const zm = @import("zmath");
 
 const Player = struct {
-    position: Vec3,
-    forward: Vec3, // force normalize && y = 0
-    velocity: Vec3, // force x = 0, z = 0
+    position: rl.Vector3,
+    forward: rl.Vector3, // force normalize && y = 0
+    velocity: rl.Vector3, // force x = 0, z = 0
     shader: rl.Shader,
 
     const radius: f32 = 0.5;
     const height: f32 = 1.0;
-    const Y = Vec3.init(0.0, 1.0, 0.0);
+    const Y = rl.Vector3.init(0.0, 1.0, 0.0);
     const moveSpeed: f32 = 5.0;
     const turnSpeed: f32 = 3.0;
-    const gravity: Vec3 = Vec3.init(0.0, -20.0, 0.0);
-    const jumpForce = Vec3.init(0.0, 8.0, 0.0);
+    const gravity: rl.Vector3 = rl.Vector3.init(0.0, -20.0, 0.0);
+    const jumpForce = rl.Vector3.init(0.0, 8.0, 0.0);
 
     pub fn init(shader: rl.Shader) Player {
-        return Player{ .position = Vec3.init(0, 0, 0), .forward = Vec3.init(0, 0, 1), .velocity = Vec3.zero(), .shader = shader };
+        return Player{ .position = rl.Vector3.init(0, 0, 0), .forward = rl.Vector3.init(0, 0, 1), .velocity = rl.Vector3.zero(), .shader = shader };
     }
 
     fn angle(self: *const Player) f32 {
@@ -79,19 +79,19 @@ const Player = struct {
         rl.gl.rlTranslatef(self.position.x, self.position.y, self.position.z);
         rl.gl.rlRotatef(self.angle() * 180.0 / std.math.pi, 0.0, 1.0, 0.0);
 
-        const centerOffset = Vec3.init(0.0, 0.0, 0.0);
+        const centerOffset = rl.Vector3.init(0.0, 0.0, 0.0);
         rl.drawCylinder(centerOffset, radius, radius * 1.2, height, 12, .white);
-        rl.drawSphere(Vec3.init(0.0, height, 0.5 * radius), 0.1, .white);
+        rl.drawSphere(rl.Vector3.init(0.0, height, 0.5 * radius), 0.1, .white);
         rl.drawCylinderWires(centerOffset, radius, radius * 1.2, height, 12, .white);
     }
 };
 
 const Ground = struct {
-    center: Vec3,
-    size: Vec2,
+    center: rl.Vector3,
+    size: rl.Vector2,
     bounds: rl.BoundingBox,
 
-    fn init(center: Vec3, size: Vec2) Ground {
+    fn init(center: rl.Vector3, size: rl.Vector2) Ground {
         return .{
             .center = center,
             .size = size,
@@ -118,12 +118,12 @@ const Ground = struct {
 };
 
 const Box = struct {
-    position: Vec3,
-    size: Vec3,
+    position: rl.Vector3,
+    size: rl.Vector3,
     color: rl.Color,
-    velocity: Vec3 = Vec3{ .x = 0, .y = 0, .z = 0 },
+    velocity: rl.Vector3 = rl.Vector3{ .x = 0, .y = 0, .z = 0 },
 
-    const gravity: Vec3 = Vec3.init(0.0, -9.8, 0.0);
+    const gravity: rl.Vector3 = rl.Vector3.init(0.0, -9.8, 0.0);
 
     fn getBounds(self: *const Box) rl.BoundingBox {
         return .{
@@ -147,7 +147,7 @@ const Box = struct {
                 // ถ้าชน (หลักๆ คือพื้น) ให้หยุด
                 if (self.position.y > targetBounds.max.y) {
                     self.position.y = targetBounds.max.y + self.size.y / 2.0;
-                    self.velocity.y *= -0.2; // กระดอนนิดหน่อย
+                    self.velocity.y *= -0.1; // กระดอนนิดหน่อย
                 }
             }
         }
@@ -219,7 +219,7 @@ pub fn main() anyerror!void {
     const normal_shader = try rl.loadShader("src/shaders/player.vert", "src/shaders/normal.frag");
     defer rl.unloadShader(normal_shader);
     var player = Player.init(normal_shader);
-    var ground = Ground.init(Vec3.init(0, 0, 0), Vec2.init(20, 20));
+    var ground = Ground.init(rl.Vector3.init(0, 0, 0), rl.Vector2.init(20, 20));
 
     var mesh_list: [102]Mesh = undefined;
     mesh_list[0] = Mesh.init(&player);
@@ -228,12 +228,12 @@ pub fn main() anyerror!void {
     var boxes: [100]Box = undefined;
     for (&boxes, 2..) |*box, idx| {
         box.* = Box{
-            .position = Vec3.init(
+            .position = rl.Vector3.init(
                 rand.float(f32) * 20.0 - 10.0,
                 rand.float(f32) * 40.0 + 10.0, // กระจายบนฟ้า
                 rand.float(f32) * 20.0 - 10.0,
             ),
-            .size = Vec3.init(0.5 + rand.float(f32), 0.5 + rand.float(f32), 0.5 + rand.float(f32)),
+            .size = rl.Vector3.init(0.5 + rand.float(f32), 0.5 + rand.float(f32), 0.5 + rand.float(f32)),
             .color = rl.Color.init(rand.uintAtMost(u8, 255), rand.uintAtMost(u8, 255), rand.uintAtMost(u8, 255), 255),
         };
         mesh_list[idx] = Mesh.init(box);
@@ -264,7 +264,7 @@ pub fn main() anyerror!void {
             const camHeight: f32 = 2.5;
             camera.position = player.position.subtract(player.forward.scale(camDistance));
             camera.position.y += camHeight;
-            camera.target = player.position.add(Vec3.init(0.0, 0.5, 0.0)); // มองไปที่กลางตัว
+            camera.target = player.position.add(rl.Vector3.init(0.0, 0.5, 0.0)); // มองไปที่กลางตัว
         }
 
         // DRAW Logic

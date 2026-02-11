@@ -8,6 +8,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const zphysics = b.dependency("zphysics", .{
+        .use_double_precision = false,
+        .enable_cross_platform_determinism = true,
+    });
+    const zmath = b.dependency("zmath", .{});
 
     const exe = b.addExecutable(.{
         .name = "zig_car_gl",
@@ -18,11 +23,15 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "raylib", .module = raylib_dep.module("raylib") },
                 .{ .name = "raygui", .module = raylib_dep.module("raygui") },
+                .{ .name = "zphysics", .module = zphysics.module("root") },
+                .{ .name = "zmath", .module = zmath.module("root") },
             },
         }),
     });
 
+    exe.linkLibrary(zphysics.artifact("joltc"));
     exe.linkLibrary(raylib_dep.artifact("raylib"));
+
     b.installArtifact(exe);
 
     // ทำให้ส่วนการรันสั้นลง
