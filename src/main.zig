@@ -7,6 +7,7 @@ const Player = struct {
     position: Vec3,
     forward: Vec3, // force normalize && y = 0
     velocity: Vec3, // force x = 0, z = 0
+    shader: rl.Shader,
 
     const radius: f32 = 0.5;
     const height: f32 = 1.0;
@@ -16,18 +17,22 @@ const Player = struct {
     const gravity: Vec3 = Vec3.init(0.0, -20.0, 0.0);
     const jumpForce = Vec3.init(0.0, 8.0, 0.0);
 
+    pub fn init(shader: rl.Shader) Player {
+        return Player{ .position = Vec3.init(0, 0, 0), .forward = Vec3.init(0, 0, 1), .velocity = Vec3.zero(), .shader = shader };
+    }
+
     fn angle(self: *const Player) f32 {
         return std.math.atan2(self.forward.x, self.forward.z);
     }
 
-    fn getBounds(self: Player) rl.BoundingBox {
+    fn getBounds(self: *const Player) rl.BoundingBox {
         return .{
             .min = .{ .x = self.position.x - radius, .y = self.position.y, .z = self.position.z - radius },
             .max = .{ .x = self.position.x + radius, .y = self.position.y + height, .z = self.position.z + radius },
         };
     }
 
-    fn update(self: *Player, dt: f32, ground_box: rl.BoundingBox) void {
+    fn update(self: *Player, dt: f32, meshs: []const Mesh) void {
         // --- Rotation ---
         var angle_: f32 = 0;
         if (rl.isKeyDown(.a)) angle_ += turnSpeed * dt;
@@ -47,28 +52,34 @@ const Player = struct {
 
         // --- Collision Checker System ---
         const playerBounds = self.getBounds();
-        if (rl.checkCollisionBoxes(playerBounds, ground_box)) {
-            // ถ้าชนพื้น ให้หยุดตกลงมา และวางเท้าบนพื้นพอดี
-            self.position.y = ground_box.max.y;
-            self.velocity.y = 0;
+        for (meshs) |mesh| {
+            if (@intFromPtr(self) == @intFromPtr(mesh.ptr)) continue;
+            const targetBounds = mesh.getBounds();
+            if (rl.checkCollisionBoxes(playerBounds, targetBounds)) {
+                // ถ้าชนวัตถุ ให้หยุดตกลงมา และวางเท้าบนวัตถุพอดี
+                self.position.y = targetBounds.max.y;
+                self.velocity.y = 0;
 
-            if (rl.isKeyPressed(.space)) {
-                self.velocity = self.velocity.add(jumpForce);
+                if (rl.isKeyPressed(.space)) {
+                    self.velocity = self.velocity.add(jumpForce);
+                }
             }
         }
     }
 
-    fn draw(self: Player, shader: rl.Shader) void {
+    fn draw(self: Player) void {
+        rl.drawBoundingBox(self.getBounds(), .red);
+
         rl.gl.rlPushMatrix();
         defer rl.gl.rlPopMatrix();
 
-        rl.beginShaderMode(shader);
+        rl.beginShaderMode(self.shader);
         defer rl.endShaderMode();
 
         rl.gl.rlTranslatef(self.position.x, self.position.y, self.position.z);
         rl.gl.rlRotatef(self.angle() * 180.0 / std.math.pi, 0.0, 1.0, 0.0);
 
-        const centerOffset = Vec3.init(0.0, height / 2.0, 0.0);
+        const centerOffset = Vec3.init(0.0, 0.0, 0.0);
         rl.drawCylinder(centerOffset, radius, radius * 1.2, height, 12, .white);
         rl.drawSphere(Vec3.init(0.0, height, 0.5 * radius), 0.1, .white);
         rl.drawCylinderWires(centerOffset, radius, radius * 1.2, height, 12, .white);
@@ -87,11 +98,53 @@ const Ground = struct {
         };
     }
 
-    fn draw(_: Ground) void {
+    fn getBounds(self: Ground) rl.BoundingBox {
+        return self.bounds;
+    }
+
+    fn draw(self: Ground) void {
+        rl.drawBoundingBox(self.getBounds(), .red);
         rl.drawPlane(Vec3.init(0.0, 0.0, 0.0), Vec2.init(20, 20), .green);
         rl.drawGrid(20, 1.0);
     }
+    fn update(_: *Ground, _: f32, _: []Mesh) void {
+        // noop
+    }
 };
+
+const Mesh = struct {
+    ptr: *anyopaque,
+    drawFn: *const fn (ptr: *anyopaque) void,
+    getBoundsFn: *const fn (ptr: *anyopaque) rl.BoundingBox,
+
+    fn init(ptr: anytype) Mesh {
+        const T = @TypeOf(ptr);
+        const gen = struct {
+            fn draw(ctx: *anyopaque) void {
+                const self: T = @ptrCast(@alignCast(ctx));
+                self.draw();
+            }
+            fn getBounds(ctx: *anyopaque) rl.BoundingBox {
+                const self: T = @ptrCast(@alignCast(ctx));
+                return self.getBounds();
+            }
+        };
+        return .{
+            .ptr = ptr,
+            .drawFn = gen.draw,
+            .getBoundsFn = gen.getBounds,
+        };
+    }
+
+    fn draw(self: Mesh) void {
+        self.drawFn(self.ptr);
+    }
+
+    fn getBounds(self: Mesh) rl.BoundingBox {
+        return self.getBoundsFn(self.ptr);
+    }
+};
+
 pub fn main() anyerror!void {
     const screenWidth = 800;
     const screenHeight = 450;
@@ -102,13 +155,14 @@ pub fn main() anyerror!void {
     rl.setTargetFPS(60);
 
     // เริ่มต้นแคลนนิ่งข้อมูลผู้เล่นเข้าระบบ Struct
-    var player = Player{
-        .position = Vec3.init(0, 0, 0),
-        .forward = Vec3.init(0, 0, 1),
-        .velocity = Vec3.zero(),
-        // .angle = 0,
+    const normal_shader = try rl.loadShader("src/shaders/player.vert", "src/shaders/normal.frag");
+    defer rl.unloadShader(normal_shader);
+    var player = Player.init(normal_shader);
+    var ground = Ground.init();
+    const meshs: [2]Mesh = .{
+        Mesh.init(&player),
+        Mesh.init(&ground),
     };
-    const ground = Ground.init();
 
     // ตั้งค่ากล้อง 3D
     var camera = rl.Camera3D{
@@ -119,14 +173,11 @@ pub fn main() anyerror!void {
         .projection = .perspective,
     };
 
-    const normal_shader = try rl.loadShader("src/shaders/player.vert", "src/shaders/normal.frag");
-    defer rl.unloadShader(normal_shader);
-
     while (!rl.windowShouldClose()) {
         const dt = rl.getFrameTime();
 
         // UPDATE Logic
-        player.update(dt, ground.bounds);
+        player.update(dt, &meshs);
 
         // UPDATE Camera (Third Person)
         {
@@ -148,8 +199,9 @@ pub fn main() anyerror!void {
                 rl.beginMode3D(camera);
                 defer rl.endMode3D();
 
-                ground.draw();
-                player.draw(normal_shader);
+                for (meshs) |mesh| {
+                    mesh.draw();
+                }
             }
 
             rl.drawText("Use WSDA to WALK | SPACE to JUMP", 10, 40, 20, .white);
