@@ -65,42 +65,40 @@ const MyObjectLayerPairFilter = extern struct {
 const PhyRef = struct {
     body_id: zphy.BodyId,
     interface: *zphy.BodyInterface,
-    fn position(self: *@This()) zm.Vec {
+    fn position(self: *const @This()) zm.Vec {
         return zm.loadArr3(self.interface.getPosition(self.body_id));
     }
-    fn rotation(self: *@This()) zm.Vec {
+    fn rotation(self: *const @This()) zm.Vec {
         return zm.loadArr4(self.interface.getRotation(self.body_id));
     }
-    fn velocity(self: *@This()) zm.Vec {
-        return zm.loadArr4(self.interface.getLinearVelocity(self.body_id));
+    fn velocity(self: *const @This()) zm.Vec {
+        return zm.loadArr3(self.interface.getLinearVelocity(self.body_id));
     }
 };
 
 const Player = struct {
-    body_id: zphy.BodyId,
+    ref: PhyRef,
     shader: rl.Shader,
-    yaw: f32, // Y-rotation (from aircraft)
 
-    const radius: f32 = 0.5;
-    const height: f32 = 1.0;
+    const size = rl.Vector3.init(1.0, 2.0, 1.0);
     const moveSpeed: f32 = 5.0;
     const turnSpeed: f32 = 3.0;
 
     pub fn init(shader: rl.Shader, physics_system: *zphy.PhysicsSystem) Player {
         const body_interface = physics_system.getBodyInterfaceMut();
 
-        const capsule_settings = zphy.CapsuleShapeSettings.create(height / 2.0, radius) catch unreachable;
-        defer capsule_settings.asShapeSettings().release();
-        const capsule_shape = capsule_settings.asShapeSettings().createShape() catch unreachable;
-        defer capsule_shape.release();
+        const box_settings = zphy.BoxShapeSettings.create(.{ size.x / 2.0, size.y / 2.0, size.z / 2.0 }) catch unreachable;
+        defer box_settings.asShapeSettings().release();
+        const box_shape = box_settings.asShapeSettings().createShape() catch unreachable;
+        defer box_shape.release();
 
         const body_id = body_interface.createAndAddBody(.{
-            .position = .{ 0, height, 0, 1 },
+            .position = .{ 0, size.y / 2.0, 0, 1 },
             .rotation = .{ 0, 0, 0, 1 },
-            .shape = capsule_shape,
+            .shape = box_shape,
             .motion_type = .dynamic,
             .object_layer = object_layers.moving,
-// .allowed_DOFs = 0b010111,
+            // .allowed_DOFs = 0b010111,
             .allowed_DOFs = @enumFromInt(0 |
                 @intFromEnum(zphy.AllowedDOFs.translation_x) |
                 @intFromEnum(zphy.AllowedDOFs.translation_y) |
@@ -109,33 +107,42 @@ const Player = struct {
         }, .activate) catch unreachable;
 
         return Player{
-            .body_id = body_id,
+            .ref = .{ .body_id = body_id, .interface = body_interface },
             .shader = shader,
-            .yaw = 0.0,
         };
     }
 
     fn update(self: *Player, dt: f32, body_interface: *zphy.BodyInterface) void {
+        _ = body_interface;
+
+        // Handling Turning via Rotation State
         const turn_input = (if (rl.isKeyDown(.a)) turnSpeed else 0.0) - (if (rl.isKeyDown(.d)) turnSpeed else 0.0);
-        self.yaw += turn_input * dt;
+        if (turn_input != 0) {
+            const current_q = self.ref.rotation();
+            const dq = zm.quatFromAxisAngle(zm.f32x4(0, 1, 0, 0), turn_input * dt);
+            const new_q = zm.qmul(dq, current_q); // Rotate around world Y
+            self.ref.interface.setRotation(self.ref.body_id, zm.vecToArr4(new_q), .activate);
+        }
 
         const walk_dist = (if (rl.isKeyDown(.w)) moveSpeed else 0.0) - (if (rl.isKeyDown(.s)) moveSpeed else 0.0);
 
-        const forward = rl.Vector3.init(@sin(self.yaw), 0, @cos(self.yaw));
-        const target_vel = forward.scale(walk_dist);
-        const current_vel = body_interface.getLinearVelocity(self.body_id);
+        // Compute forward from current rotation
+        const forward = zm.rotate(self.ref.rotation(), zm.f32x4(0, 0, 1, 0));
+        const current_vel = self.ref.velocity();
 
-        body_interface.setLinearVelocity(self.body_id, .{ target_vel.x, current_vel[1], target_vel.z });
+        self.ref.interface.setLinearVelocity(self.ref.body_id, .{ forward[0] * walk_dist, current_vel[1], forward[2] * walk_dist });
 
         if (rl.isKeyPressed(.space)) {
             if (@abs(current_vel[1]) < 0.1) {
-                body_interface.addImpulse(self.body_id, .{ 0, 8, 0 });
+                self.ref.interface.addImpulse(self.ref.body_id, .{ 0, 8, 0 });
             }
         }
     }
 
     fn draw(self: Player, body_interface: *const zphy.BodyInterface) void {
-        const p = body_interface.getPosition(self.body_id);
+        _ = body_interface;
+        const p = self.ref.position();
+        const q = self.ref.rotation();
 
         rl.gl.rlPushMatrix();
         defer rl.gl.rlPopMatrix();
@@ -144,16 +151,19 @@ const Player = struct {
         defer rl.endShaderMode();
 
         rl.gl.rlTranslatef(p[0], p[1], p[2]);
-        rl.gl.rlRotatef(self.yaw * 180.0 / std.math.pi, 0.0, 1.0, 0.0);
 
-        const centerOffset = rl.Vector3.init(0.0, 0.0, 0.0);
-        rl.drawCylinder(centerOffset, radius, radius, height, 12, .white);
-        rl.drawCylinderWires(centerOffset, radius, radius, height, 12, .white);
+        var angle_val: f32 = 0;
+        var axis = zm.f32x4(0, 1, 0, 0);
+        zm.quatToAxisAngle(q, &axis, &angle_val);
+        rl.gl.rlRotatef(angle_val * 180.0 / std.math.pi, axis[0], axis[1], axis[2]);
+
+        rl.drawCube(rl.Vector3.zero(), size.x, size.y, size.z, .red);
+        rl.drawCubeWires(rl.Vector3.zero(), size.x, size.y, size.z, .maroon);
     }
 };
 
 const Ground = struct {
-    body_id: zphy.BodyId,
+    ref: PhyRef,
     size: rl.Vector2,
 
     fn init(center: rl.Vector3, size: rl.Vector2, physics_system: *zphy.PhysicsSystem) Ground {
@@ -172,13 +182,14 @@ const Ground = struct {
         }, .activate) catch unreachable;
 
         return .{
-            .body_id = body_id,
+            .ref = .{ .body_id = body_id, .interface = body_interface },
             .size = size,
         };
     }
 
     fn draw(self: Ground, body_interface: *const zphy.BodyInterface) void {
-        const p = body_interface.getPosition(self.body_id);
+        _ = body_interface;
+        const p = self.ref.position();
         rl.drawPlane(rl.Vector3.init(p[0], p[1] + 0.1, p[2]), self.size, .green);
         rl.drawGrid(@intFromFloat(self.size.x), 1.0);
     }
@@ -187,7 +198,7 @@ const Ground = struct {
 };
 
 const Box = struct {
-    body_id: zphy.BodyId,
+    ref: PhyRef,
     size: rl.Vector3,
     color: rl.Color,
 
@@ -207,15 +218,16 @@ const Box = struct {
         }, .activate) catch unreachable;
 
         return .{
-            .body_id = body_id,
+            .ref = .{ .body_id = body_id, .interface = body_interface },
             .size = size,
             .color = color,
         };
     }
 
     fn draw(self: Box, body_interface: *const zphy.BodyInterface) void {
-        const p = body_interface.getPosition(self.body_id);
-        const q = body_interface.getRotation(self.body_id);
+        _ = body_interface;
+        const p = self.ref.position();
+        const q = self.ref.rotation();
 
         rl.gl.rlPushMatrix();
         defer rl.gl.rlPopMatrix();
@@ -224,7 +236,7 @@ const Box = struct {
 
         var angle_val: f32 = 0;
         var axis = zm.f32x4(0, 1, 0, 0);
-        zm.quatToAxisAngle(zm.loadArr4(q), &axis, &angle_val);
+        zm.quatToAxisAngle(q, &axis, &angle_val);
         rl.gl.rlRotatef(angle_val * 180.0 / std.math.pi, axis[0], axis[1], axis[2]);
 
         rl.drawCube(rl.Vector3.zero(), self.size.x, self.size.y, self.size.z, self.color);
@@ -292,6 +304,7 @@ pub fn main() anyerror!void {
         },
     );
     defer physics_system.destroy();
+    physics_system.setGravity(.{ 0, -9.81, 0 });
 
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
     const rand = prng.random();
@@ -350,11 +363,14 @@ pub fn main() anyerror!void {
             mesh.update(dt, body_interface);
         }
 
-        // Camera update: pull position directly from physics
-        const p = body_interface.getPosition(player.body_id);
-        const player_pos = rl.Vector3.init(p[0], p[1], p[2]);
-        const camOffset = rl.Vector3.init(0.0, 5.0, -10.0).rotateByAxisAngle(rl.Vector3.init(0, 1, 0), player.yaw);
-        camera.position = player_pos.add(camOffset);
+        // Camera update: pull position and rotation directly from physics
+        const player_pos_v = player.ref.position();
+        const player_pos = rl.Vector3.init(player_pos_v[0], player_pos_v[1], player_pos_v[2]);
+        const q = player.ref.rotation();
+
+        // Calculate camera offset by rotating the local offset (0, 5, -10) by the player's world rotation
+        const camOffset_v = zm.rotate(q, zm.f32x4(0, 5, -10, 0));
+        camera.position = player_pos.add(rl.Vector3.init(camOffset_v[0], camOffset_v[1], camOffset_v[2]));
         camera.target = player_pos;
 
         rl.beginDrawing();
