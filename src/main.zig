@@ -107,33 +107,87 @@ const Ground = struct {
         rl.drawPlane(Vec3.init(0.0, 0.0, 0.0), Vec2.init(20, 20), .green);
         rl.drawGrid(20, 1.0);
     }
-    fn update(_: *Ground, _: f32, _: []Mesh) void {
+    fn update(self: *Ground, _: f32, _: []const Mesh) void {
+        _ = self;
         // noop
+    }
+};
+
+const Box = struct {
+    position: Vec3,
+    size: Vec3,
+    color: rl.Color,
+    velocity: Vec3 = Vec3{ .x = 0, .y = 0, .z = 0 },
+
+    const gravity: Vec3 = Vec3.init(0.0, -9.8, 0.0);
+
+    fn getBounds(self: *const Box) rl.BoundingBox {
+        return .{
+            .min = self.position.subtract(self.size.scale(0.5)),
+            .max = self.position.add(self.size.scale(0.5)),
+        };
+    }
+
+    fn update(self: *Box, dt: f32, meshs: []const Mesh) void {
+        // อัปเดตฟิสิกส์พื้นฐาน
+        self.velocity = self.velocity.add(gravity.scale(dt));
+        self.position = self.position.add(self.velocity.scale(dt));
+
+        // การเช็ก Collision กับ Mesh อื่นๆ (เช่น พื้น หรือ กล่องใบอื่น)
+        const myBounds = self.getBounds();
+        for (meshs) |mesh| {
+            if (@intFromPtr(self) == @intFromPtr(mesh.ptr)) continue;
+
+            const targetBounds = mesh.getBounds();
+            if (rl.checkCollisionBoxes(myBounds, targetBounds)) {
+                // ถ้าชน (หลักๆ คือพื้น) ให้หยุด
+                if (self.position.y > targetBounds.max.y) {
+                    self.position.y = targetBounds.max.y + self.size.y / 2.0;
+                    self.velocity.y *= -0.2; // กระดอนนิดหน่อย
+                }
+            }
+        }
+    }
+
+    fn draw(self: Box) void {
+        rl.drawCube(self.position, self.size.x, self.size.y, self.size.z, self.color);
+        rl.drawCubeWires(self.position, self.size.x, self.size.y, self.size.z, .black);
     }
 };
 
 const Mesh = struct {
     ptr: *anyopaque,
+    updateFn: *const fn (ptr: *anyopaque, dt: f32, meshs: []const Mesh) void,
     drawFn: *const fn (ptr: *anyopaque) void,
     getBoundsFn: *const fn (ptr: *anyopaque) rl.BoundingBox,
 
     fn init(ptr: anytype) Mesh {
         const T = @TypeOf(ptr);
+        const PtrT = if (@typeInfo(T) == .pointer) T else *T;
         const gen = struct {
+            fn update(ctx: *anyopaque, dt: f32, meshs: []const Mesh) void {
+                const self: PtrT = @ptrCast(@alignCast(ctx));
+                self.update(dt, meshs);
+            }
             fn draw(ctx: *anyopaque) void {
-                const self: T = @ptrCast(@alignCast(ctx));
+                const self: PtrT = @ptrCast(@alignCast(ctx));
                 self.draw();
             }
             fn getBounds(ctx: *anyopaque) rl.BoundingBox {
-                const self: T = @ptrCast(@alignCast(ctx));
+                const self: PtrT = @ptrCast(@alignCast(ctx));
                 return self.getBounds();
             }
         };
         return .{
-            .ptr = ptr,
+            .ptr = @constCast(ptr), // บังคับเป็น mutable pointer เพื่อเก็บใน Mesh
+            .updateFn = gen.update,
             .drawFn = gen.draw,
             .getBoundsFn = gen.getBounds,
         };
+    }
+
+    fn update(self: Mesh, dt: f32, meshs: []const Mesh) void {
+        self.updateFn(self.ptr, dt, meshs);
     }
 
     fn draw(self: Mesh) void {
@@ -146,6 +200,9 @@ const Mesh = struct {
 };
 
 pub fn main() anyerror!void {
+    var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+    const rand = prng.random();
+
     const screenWidth = 800;
     const screenHeight = 450;
 
@@ -159,10 +216,26 @@ pub fn main() anyerror!void {
     defer rl.unloadShader(normal_shader);
     var player = Player.init(normal_shader);
     var ground = Ground.init();
-    const meshs: [2]Mesh = .{
-        Mesh.init(&player),
-        Mesh.init(&ground),
-    };
+
+    var mesh_list: [102]Mesh = undefined;
+    mesh_list[0] = Mesh.init(&player);
+    mesh_list[1] = Mesh.init(&ground);
+
+    var boxes: [100]Box = undefined;
+    for (&boxes, 2..) |*box, idx| {
+        box.* = Box{
+            .position = Vec3.init(
+                rand.float(f32) * 20.0 - 10.0,
+                rand.float(f32) * 40.0 + 10.0, // กระจายบนฟ้า
+                rand.float(f32) * 20.0 - 10.0,
+            ),
+            .size = Vec3.init(0.5 + rand.float(f32), 0.5 + rand.float(f32), 0.5 + rand.float(f32)),
+            .color = rl.Color.init(rand.uintAtMost(u8, 255), rand.uintAtMost(u8, 255), rand.uintAtMost(u8, 255), 255),
+        };
+        mesh_list[idx] = Mesh.init(box);
+    }
+
+    const meshs: []const Mesh = &mesh_list;
 
     // ตั้งค่ากล้อง 3D
     var camera = rl.Camera3D{
@@ -176,8 +249,10 @@ pub fn main() anyerror!void {
     while (!rl.windowShouldClose()) {
         const dt = rl.getFrameTime();
 
-        // UPDATE Logic
-        player.update(dt, &meshs);
+        // UPDATE Logic (Update all meshes)
+        for (meshs) |mesh| {
+            mesh.update(dt, meshs);
+        }
 
         // UPDATE Camera (Third Person)
         {
