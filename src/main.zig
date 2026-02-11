@@ -87,13 +87,17 @@ const Player = struct {
 };
 
 const Ground = struct {
+    center: Vec3,
+    size: Vec2,
     bounds: rl.BoundingBox,
 
-    fn init() Ground {
+    fn init(center: Vec3, size: Vec2) Ground {
         return .{
+            .center = center,
+            .size = size,
             .bounds = .{
-                .min = .{ .x = -10, .y = -0.1, .z = -10 },
-                .max = .{ .x = 10, .y = 0.0, .z = 10 },
+                .min = .{ .x = center.x - size.x / 2.0, .y = center.y - 0.1, .z = center.z - size.y / 2.0 },
+                .max = .{ .x = center.x + size.x / 2.0, .y = center.y, .z = center.z + size.y / 2.0 },
             },
         };
     }
@@ -104,8 +108,8 @@ const Ground = struct {
 
     fn draw(self: Ground) void {
         rl.drawBoundingBox(self.getBounds(), .red);
-        rl.drawPlane(Vec3.init(0.0, 0.0, 0.0), Vec2.init(20, 20), .green);
-        rl.drawGrid(20, 1.0);
+        rl.drawPlane(self.center, self.size, .green);
+        rl.drawGrid(@intFromFloat(self.size.x), 1.0);
     }
     fn update(self: *Ground, _: f32, _: []const Mesh) void {
         _ = self;
@@ -215,7 +219,7 @@ pub fn main() anyerror!void {
     const normal_shader = try rl.loadShader("src/shaders/player.vert", "src/shaders/normal.frag");
     defer rl.unloadShader(normal_shader);
     var player = Player.init(normal_shader);
-    var ground = Ground.init();
+    var ground = Ground.init(Vec3.init(0, 0, 0), Vec2.init(20, 20));
 
     var mesh_list: [102]Mesh = undefined;
     mesh_list[0] = Mesh.init(&player);
