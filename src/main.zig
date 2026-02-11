@@ -39,34 +39,38 @@ pub fn main() anyerror!void {
 
         // ส่งค่า seconds ไปที่ Shader
         rl.setShaderValue(shader, seconds_loc, &seconds, .float);
-
-        // ให้กล้องหมุนรอบจุดศูนย์กลาง
         rl.updateCamera(&camera, .orbital);
 
         // Draw
-        rl.beginDrawing();
-        defer rl.endDrawing();
+        {
+            rl.beginDrawing();
+            defer rl.endDrawing();
 
-        rl.clearBackground(rl.Color.fromHSV(hue, 0.2, 0.1));
+            rl.clearBackground(rl.Color.fromHSV(hue, 0.5, 0.5));
 
-        // --- LAYER 1: 3D WORLD ---
-        rl.beginMode3D(camera);
-        rl.drawGrid(10, 1.0); // ตารางพื้น
-        rl.drawCube(.{ .x = 0, .y = 0.5, .z = 0 }, 1, 1, 1, .red); // กล่องตรงกลาง
-        rl.drawCubeWires(.{ .x = 0, .y = 0.5, .z = 0 }, 1.1, 1.1, 1.1, .white);
-        rl.endMode3D();
+            // --- LAYER 1: 3D WORLD ---
+            {
+                rl.beginMode3D(camera);
+                defer rl.endMode3D();
+                rl.drawGrid(10, 1.0); // ตารางพื้น
+                rl.drawCube(.{ .x = 0, .y = 0.5, .z = 0 }, 1, 1, 1, .red); // กล่องตรงกลาง
+                rl.drawCubeWires(.{ .x = 0, .y = 0.5, .z = 0 }, 1.1, 1.1, 1.1, .white);
+            }
 
-        // --- LAYER 2: 2D OVERLAY (UI) ---
-        rl.beginShaderMode(shader);
-        rl.drawTriangle(
-            .{ .x = 400, .y = 100 },
-            .{ .x = 300, .y = 300 },
-            .{ .x = 500, .y = 300 },
-            rl.Color.gold.fade(0.5),
-        );
-        rl.endShaderMode();
+            // --- LAYER 2: 2D OVERLAY (UI) ---
+            {
+                rl.beginShaderMode(shader);
+                defer rl.endShaderMode();
+                rl.drawTriangle(
+                    .{ .x = 400, .y = 100 },
+                    .{ .x = 300, .y = 300 },
+                    .{ .x = 500, .y = 300 },
+                    rl.Color.gold.fade(0.5),
+                );
+            }
 
-        rl.drawText("Congrats! Krist\nHybrid 2D + 3D!", 10, y, 20, .white);
-        rl.drawFPS(10, 10);
+            rl.drawText("Congrats! Krist\nHybrid 2D + 3D!", 10, y, 20, .white);
+            rl.drawFPS(10, 10);
+        }
     }
 }
