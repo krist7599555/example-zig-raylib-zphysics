@@ -1,5 +1,7 @@
 # Zig + Raylib + ZPhysics Example
 
+<img width="912" height="594" alt="Screenshot 2569-02-12 at 05 32 11" src="https://github.com/user-attachments/assets/1eddcafa-cc04-4dc8-aff8-68d48d93becb" />
+
 A high-performance 3D physics demonstration built with **Zig**, **Raylib**, and **ZPhysics** (Jolt Physics).
 
 ![Demo Concept](https://img.shields.io/badge/Zig-0.15.2-orange.svg)
