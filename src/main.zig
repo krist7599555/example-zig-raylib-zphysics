@@ -15,8 +15,11 @@ pub fn main() anyerror!void {
     // ข้อมูลผู้เล่น
     var playerPos = rl.Vector3{ .x = 0.0, .y = 0.0, .z = 0.0 };
     var playerAngle: f32 = 0.0; // มุมที่ผู้เล่นหันหน้าไป (เป็นเรเดียน)
+    var playerVelocityY: f32 = 0.0;
     const moveSpeed: f32 = 5.0;
     const turnSpeed: f32 = 3.0;
+    const gravity: f32 = -20.0;
+    const jumpForce: f32 = 8.0;
 
     // ตั้งค่ากล้อง 3D (เริ่มต้น)
     var camera = rl.Camera3D{
@@ -50,6 +53,21 @@ pub fn main() anyerror!void {
                 if (rl.isKeyDown(.s)) {
                     playerPos = playerPos.add(forward.scale(-1.0 * moveSpeed * dt));
                 }
+
+                // --- JUMP & GRAVITY ---
+                const isGrounded = playerPos.y <= 0.0;
+
+                if (isGrounded) {
+                    playerPos.y = 0.0;
+                    playerVelocityY = 0.0;
+                    if (rl.isKeyPressed(.space)) {
+                        playerVelocityY = jumpForce;
+                    }
+                } else {
+                    playerVelocityY += gravity * dt;
+                }
+
+                playerPos.y += playerVelocityY * dt;
             }
 
             // --- UPDATE: Camera (Third Person) ---
