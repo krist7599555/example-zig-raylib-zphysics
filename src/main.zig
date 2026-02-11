@@ -13,23 +13,24 @@ pub fn main() anyerror!void {
     //--------------------------------------------------------------------------------------
 
     var y: i32 = 200;
+    // const bg = rl.Color.orange;
+    var hue: f32 = 0.0;
     // Main game loop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
-        y += 1;
-        if (y > screenHeight) y = 0;
         // Update
-        //----------------------------------------------------------------------------------
-        // TODO: Update your variables here
-        //----------------------------------------------------------------------------------
+        y += 1;
+        hue += 2.0;
+        if (y > screenHeight) y = -20;
 
         // Draw
         //----------------------------------------------------------------------------------
         rl.beginDrawing();
         defer rl.endDrawing();
 
-        rl.clearBackground(.white);
+        rl.clearBackground(rl.Color.fromHSV(hue, 0.5, 0.5));
 
-        rl.drawText("Congrats! You created your first window!", 190, y, 20, .light_gray);
+        rl.drawText("Congrats! Krist\nYou created\nyour first window!", 190, y, 20, .white);
         //----------------------------------------------------------------------------------
+        rl.drawFPS(10, 10);
     }
 }
