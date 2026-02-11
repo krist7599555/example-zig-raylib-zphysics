@@ -2,70 +2,12 @@ const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
 const zm = @import("zmath");
+const zphy_helper = @import("./zphy_helper.zig");
 
 const X = zm.Vec{ 1, 0, 0, 0 };
 const Y = zm.Vec{ 0, 1, 0, 0 };
 const Z = zm.Vec{ 0, 0, 1, 0 };
 const DT: f32 = 1.0 / 60.0; // delta time
-
-// --- Physics Configuration ---
-const object_layers = struct {
-    const non_moving: zphy.ObjectLayer = 0;
-    const moving: zphy.ObjectLayer = 1;
-    const len: u32 = 2;
-};
-
-const broad_phase_layers = struct {
-    const non_moving: zphy.BroadPhaseLayer = 0;
-    const moving: zphy.BroadPhaseLayer = 1;
-    const len: u32 = 2;
-};
-
-const MyBroadphaseLayerInterface = extern struct {
-    interface: zphy.BroadPhaseLayerInterface = .init(@This()),
-    object_to_broad_phase: [object_layers.len]zphy.BroadPhaseLayer = undefined,
-
-    fn init() MyBroadphaseLayerInterface {
-        var layer_interface: MyBroadphaseLayerInterface = .{};
-        layer_interface.object_to_broad_phase[object_layers.non_moving] = broad_phase_layers.non_moving;
-        layer_interface.object_to_broad_phase[object_layers.moving] = broad_phase_layers.moving;
-        return layer_interface;
-    }
-
-    pub fn getNumBroadPhaseLayers(interface: *const zphy.BroadPhaseLayerInterface) callconv(.c) u32 {
-        const self: *const MyBroadphaseLayerInterface = @alignCast(@fieldParentPtr("interface", interface));
-        return @intCast(self.object_to_broad_phase.len);
-    }
-
-    pub fn getBroadPhaseLayer(interface: *const zphy.BroadPhaseLayerInterface, layer: zphy.ObjectLayer) callconv(.c) zphy.BroadPhaseLayer {
-        const self: *const MyBroadphaseLayerInterface = @alignCast(@fieldParentPtr("interface", interface));
-        return self.object_to_broad_phase[@intCast(layer)];
-    }
-};
-
-const MyObjectVsBroadPhaseLayerFilter = extern struct {
-    filter: zphy.ObjectVsBroadPhaseLayerFilter = .init(@This()),
-
-    pub fn shouldCollide(_: *const zphy.ObjectVsBroadPhaseLayerFilter, layer1: zphy.ObjectLayer, layer2: zphy.BroadPhaseLayer) callconv(.c) bool {
-        return switch (layer1) {
-            object_layers.non_moving => layer2 == broad_phase_layers.moving,
-            object_layers.moving => true,
-            else => unreachable,
-        };
-    }
-};
-
-const MyObjectLayerPairFilter = extern struct {
-    interface: zphy.ObjectLayerPairFilter = .init(@This()),
-
-    pub fn shouldCollide(_: *const zphy.ObjectLayerPairFilter, object1: zphy.ObjectLayer, object2: zphy.ObjectLayer) callconv(.c) bool {
-        return switch (object1) {
-            object_layers.non_moving => object2 == object_layers.moving,
-            object_layers.moving => true,
-            else => unreachable,
-        };
-    }
-};
 
 const PhyRef = struct {
     body_id: zphy.BodyId,
@@ -92,17 +34,14 @@ const Player = struct {
     pub fn init(shader: rl.Shader, physics_system: *zphy.PhysicsSystem) Player {
         const body_interface = physics_system.getBodyInterfaceMut();
 
-        const box_settings = zphy.BoxShapeSettings.create(.{ size.x / 2.0, size.y / 2.0, size.z / 2.0 }) catch unreachable;
-        defer box_settings.asShapeSettings().release();
-        const box_shape = box_settings.asShapeSettings().createShape() catch unreachable;
-        defer box_shape.release();
+        const box_shape = zphy_helper.createBoxShape(.{ size.x, size.y, size.z }) catch unreachable;
 
         const body_id = body_interface.createAndAddBody(.{
             .position = .{ 0, size.y / 2.0, 0, 1 },
             .rotation = .{ 0, 0, 0, 1 },
             .shape = box_shape,
             .motion_type = .dynamic,
-            .object_layer = object_layers.moving,
+            .object_layer = zphy_helper.object_layers.moving,
 
             // .override_mass_properties = .calc_mass_inertia,
             .mass_properties_override = .{
@@ -192,17 +131,13 @@ const Ground = struct {
 
     fn init(center: rl.Vector3, size: rl.Vector2, physics_system: *zphy.PhysicsSystem) Ground {
         const body_interface = physics_system.getBodyInterfaceMut();
-
-        const box_settings = zphy.BoxShapeSettings.create(.{ size.x / 2.0, 0.1, size.y / 2.0 }) catch unreachable;
-        defer box_settings.asShapeSettings().release();
-        const box_shape = box_settings.asShapeSettings().createShape() catch unreachable;
-        defer box_shape.release();
+        const box_shape = zphy_helper.createBoxShape(.{ size.x, 0.1, size.y }) catch unreachable;
 
         const body_id = body_interface.createAndAddBody(.{
             .position = .{ center.x, center.y - 0.1, center.z, 1 },
             .shape = box_shape,
             .motion_type = .static,
-            .object_layer = object_layers.non_moving,
+            .object_layer = zphy_helper.object_layers.non_moving,
         }, .activate) catch unreachable;
 
         return .{
@@ -229,16 +164,13 @@ const Box = struct {
     fn init(pos: rl.Vector3, size: rl.Vector3, color: rl.Color, physics_system: *zphy.PhysicsSystem) Box {
         const body_interface = physics_system.getBodyInterfaceMut();
 
-        const box_settings = zphy.BoxShapeSettings.create(.{ size.x / 2.0, size.y / 2.0, size.z / 2.0 }) catch unreachable;
-        defer box_settings.asShapeSettings().release();
-        const box_shape = box_settings.asShapeSettings().createShape() catch unreachable;
-        defer box_shape.release();
+        const box_shape = zphy_helper.createBoxShape(.{ size.x, size.y, size.z }) catch unreachable;
 
         const body_id = body_interface.createAndAddBody(.{
             .position = .{ pos.x, pos.y, pos.z, 1 },
             .shape = box_shape,
             .motion_type = .dynamic,
-            .object_layer = object_layers.moving,
+            .object_layer = zphy_helper.object_layers.moving,
         }, .activate) catch unreachable;
 
         return .{
@@ -312,21 +244,11 @@ pub fn main() anyerror!void {
     try zphy.init(allocator, .{});
     defer zphy.deinit();
 
-    const layer_interface = MyBroadphaseLayerInterface.init();
-    const object_vs_broad_phase_filter = MyObjectVsBroadPhaseLayerFilter{};
-    const object_layer_pair_filter = MyObjectLayerPairFilter{};
+    // const layer_interface = MyBroadphaseLayerInterface.init();
+    // const object_vs_broad_phase_filter = MyObjectVsBroadPhaseLayerFilter{};
+    // const object_layer_pair_filter = MyObjectLayerPairFilter{};
 
-    var physics_system = try zphy.PhysicsSystem.create(
-        @ptrCast(&layer_interface),
-        @ptrCast(&object_vs_broad_phase_filter),
-        @ptrCast(&object_layer_pair_filter),
-        .{
-            .max_bodies = 1024,
-            .num_body_mutexes = 0,
-            .max_body_pairs = 1024,
-            .max_contact_constraints = 1024,
-        },
-    );
+    var physics_system = try zphy_helper.createPhysicsSystem(allocator);
     defer physics_system.destroy();
     physics_system.setGravity(.{ 0, -9.81, 0 });
 
