@@ -207,3 +207,9 @@ pub fn rotateY(current_q: Vec4, by: f32) Vec4 {
     const new_q = zm.qmul(dq, current_q); // Rotate around world Y
     return new_q;
 }
+
+pub fn remapClamp(val: f32, in_min: f32, in_max: f32, out_min: f32, out_max: f32) f32 {
+    const t = (val - in_min) / (in_max - in_min);
+    const clamped_t = std.math.clamp(t, 0.0, 1.0);
+    return out_min + clamped_t * (out_max - out_min);
+}
