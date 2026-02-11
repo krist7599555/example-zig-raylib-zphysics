@@ -6,6 +6,7 @@ const zm = @import("zmath");
 const X = zm.Vec{ 1, 0, 0, 0 };
 const Y = zm.Vec{ 0, 1, 0, 0 };
 const Z = zm.Vec{ 0, 0, 1, 0 };
+const DT: f32 = 1.0 / 60.0; // delta time
 
 // --- Physics Configuration ---
 const object_layers = struct {
@@ -140,11 +141,22 @@ const Player = struct {
         const forward = zm.rotate(self.ref.rotation(), Z);
         const current_vel = self.ref.velocity();
 
-        var target_vel_y = current_vel[1];
+        var gravity_scale: f32 = 1.0;
+        if (current_vel[1] < -0.1) {
+            gravity_scale = 2.5; // Fast fall: ขาลงรวดเร็ว
+        } else if (current_vel[1] > 0.1 and !rl.isKeyDown(.space)) {
+            gravity_scale = 4.0; // Early release "Low Jump"
+        }
+
+        // Apply extra gravity velocity change
+        // Note: engine already applied 1.0 gravity. we add (scale - 1.0) more.
+        const extra_gravity = -9.81 * (gravity_scale - 1.0) * dt;
+        var target_vel_y = current_vel[1] + extra_gravity;
+
         if (rl.isKeyPressed(.space)) {
-            // Simple ground check based on Y velocity
+            // Ground check: check if vertical velocity is near zero or negative
             if (@abs(current_vel[1]) < 0.1) {
-                target_vel_y = 8.0;
+                target_vel_y = 10.0; // Upward impulse: ขาขึ้นนุ่มนวล
             }
         }
 
