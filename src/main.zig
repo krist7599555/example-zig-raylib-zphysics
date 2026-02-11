@@ -102,12 +102,18 @@ const Player = struct {
             .shape = box_shape,
             .motion_type = .dynamic,
             .object_layer = object_layers.moving,
-            // .allowed_DOFs = 0b010111,
-            .allowed_DOFs = @enumFromInt(@intFromEnum(zphy.AllowedDOFs.translation_x) |
+
+            // .override_mass_properties = .calc_mass_inertia,
+            .mass_properties_override = .{
+                .mass = 1.0,
+                .inertia = @splat(0),
+            },
+
+            // .mass_properties_override.inertia = zphysics.Mat44.zero,
+            .allowed_DOFs = @enumFromInt(0 |
+                @intFromEnum(zphy.AllowedDOFs.translation_x) |
                 @intFromEnum(zphy.AllowedDOFs.translation_y) |
-                @intFromEnum(zphy.AllowedDOFs.translation_z) |
-                0 // @intFromEnum(zphy.AllowedDOFs.rotation_y)
-            ),
+                @intFromEnum(zphy.AllowedDOFs.translation_z)),
         }, .activate) catch unreachable;
 
         return Player{
@@ -134,13 +140,15 @@ const Player = struct {
         const forward = zm.rotate(self.ref.rotation(), Z);
         const current_vel = self.ref.velocity();
 
-        self.ref.interface.setLinearVelocity(self.ref.body_id, .{ forward[0] * walk_dist, current_vel[1], forward[2] * walk_dist });
-
+        var target_vel_y = current_vel[1];
         if (rl.isKeyPressed(.space)) {
+            // Simple ground check based on Y velocity
             if (@abs(current_vel[1]) < 0.1) {
-                self.ref.interface.addImpulse(self.ref.body_id, .{ 0, 8, 0 });
+                target_vel_y = 8.0;
             }
         }
+
+        self.ref.interface.setLinearVelocity(self.ref.body_id, .{ forward[0] * walk_dist, target_vel_y, forward[2] * walk_dist });
     }
 
     fn draw(self: Player, body_interface: *const zphy.BodyInterface) void {
