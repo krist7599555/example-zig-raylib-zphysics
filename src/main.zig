@@ -1,74 +1,135 @@
-const rl = @import("raylib");
 const std = @import("std");
+const rl = @import("raylib");
 const zphy = @import("zphysics");
 const zm = @import("zmath");
 
+// --- Physics Configuration ---
+const object_layers = struct {
+    const non_moving: zphy.ObjectLayer = 0;
+    const moving: zphy.ObjectLayer = 1;
+    const len: u32 = 2;
+};
+
+const broad_phase_layers = struct {
+    const non_moving: zphy.BroadPhaseLayer = 0;
+    const moving: zphy.BroadPhaseLayer = 1;
+    const len: u32 = 2;
+};
+
+const MyBroadphaseLayerInterface = extern struct {
+    interface: zphy.BroadPhaseLayerInterface = .init(@This()),
+    object_to_broad_phase: [object_layers.len]zphy.BroadPhaseLayer = undefined,
+
+    fn init() MyBroadphaseLayerInterface {
+        var layer_interface: MyBroadphaseLayerInterface = .{};
+        layer_interface.object_to_broad_phase[object_layers.non_moving] = broad_phase_layers.non_moving;
+        layer_interface.object_to_broad_phase[object_layers.moving] = broad_phase_layers.moving;
+        return layer_interface;
+    }
+
+    pub fn getNumBroadPhaseLayers(interface: *const zphy.BroadPhaseLayerInterface) callconv(.c) u32 {
+        const self: *const MyBroadphaseLayerInterface = @alignCast(@fieldParentPtr("interface", interface));
+        return @intCast(self.object_to_broad_phase.len);
+    }
+
+    pub fn getBroadPhaseLayer(interface: *const zphy.BroadPhaseLayerInterface, layer: zphy.ObjectLayer) callconv(.c) zphy.BroadPhaseLayer {
+        const self: *const MyBroadphaseLayerInterface = @alignCast(@fieldParentPtr("interface", interface));
+        return self.object_to_broad_phase[@intCast(layer)];
+    }
+};
+
+const MyObjectVsBroadPhaseLayerFilter = extern struct {
+    filter: zphy.ObjectVsBroadPhaseLayerFilter = .init(@This()),
+
+    pub fn shouldCollide(_: *const zphy.ObjectVsBroadPhaseLayerFilter, layer1: zphy.ObjectLayer, layer2: zphy.BroadPhaseLayer) callconv(.c) bool {
+        return switch (layer1) {
+            object_layers.non_moving => layer2 == broad_phase_layers.moving,
+            object_layers.moving => true,
+            else => unreachable,
+        };
+    }
+};
+
+const MyObjectLayerPairFilter = extern struct {
+    interface: zphy.ObjectLayerPairFilter = .init(@This()),
+
+    pub fn shouldCollide(_: *const zphy.ObjectLayerPairFilter, object1: zphy.ObjectLayer, object2: zphy.ObjectLayer) callconv(.c) bool {
+        return switch (object1) {
+            object_layers.non_moving => object2 == object_layers.moving,
+            object_layers.moving => true,
+            else => unreachable,
+        };
+    }
+};
+
+const PhyRef = struct {
+    body_id: zphy.BodyId,
+    interface: *zphy.BodyInterface,
+    fn position(self: *@This()) zm.Vec {
+        return zm.loadArr3(self.interface.getPosition(self.body_id));
+    }
+    fn rotation(self: *@This()) zm.Vec {
+        return zm.loadArr4(self.interface.getRotation(self.body_id));
+    }
+    fn velocity(self: *@This()) zm.Vec {
+        return zm.loadArr4(self.interface.getLinearVelocity(self.body_id));
+    }
+};
+
 const Player = struct {
-    position: rl.Vector3,
-    forward: rl.Vector3, // force normalize && y = 0
-    velocity: rl.Vector3, // force x = 0, z = 0
+    body_id: zphy.BodyId,
     shader: rl.Shader,
+    yaw: f32, // Y-rotation (from aircraft)
 
     const radius: f32 = 0.5;
     const height: f32 = 1.0;
-    const Y = rl.Vector3.init(0.0, 1.0, 0.0);
     const moveSpeed: f32 = 5.0;
     const turnSpeed: f32 = 3.0;
-    const gravity: rl.Vector3 = rl.Vector3.init(0.0, -20.0, 0.0);
-    const jumpForce = rl.Vector3.init(0.0, 8.0, 0.0);
 
-    pub fn init(shader: rl.Shader) Player {
-        return Player{ .position = rl.Vector3.init(0, 0, 0), .forward = rl.Vector3.init(0, 0, 1), .velocity = rl.Vector3.zero(), .shader = shader };
-    }
+    pub fn init(shader: rl.Shader, physics_system: *zphy.PhysicsSystem) Player {
+        const body_interface = physics_system.getBodyInterfaceMut();
 
-    fn angle(self: *const Player) f32 {
-        return std.math.atan2(self.forward.x, self.forward.z);
-    }
+        const capsule_settings = zphy.CapsuleShapeSettings.create(height / 2.0, radius) catch unreachable;
+        defer capsule_settings.asShapeSettings().release();
+        const capsule_shape = capsule_settings.asShapeSettings().createShape() catch unreachable;
+        defer capsule_shape.release();
 
-    fn getBounds(self: *const Player) rl.BoundingBox {
-        return .{
-            .min = .{ .x = self.position.x - radius, .y = self.position.y, .z = self.position.z - radius },
-            .max = .{ .x = self.position.x + radius, .y = self.position.y + height, .z = self.position.z + radius },
+        const body_id = body_interface.createAndAddBody(.{
+            .position = .{ 0, height, 0, 1 },
+            .rotation = .{ 0, 0, 0, 1 },
+            .shape = capsule_shape,
+            .motion_type = .dynamic,
+            .object_layer = object_layers.moving,
+        }, .activate) catch unreachable;
+
+        return Player{
+            .body_id = body_id,
+            .shader = shader,
+            .yaw = 0.0,
         };
     }
 
-    fn update(self: *Player, dt: f32, meshs: []const Mesh) void {
-        // --- Rotation ---
-        var angle_: f32 = 0;
-        if (rl.isKeyDown(.a)) angle_ += turnSpeed * dt;
-        if (rl.isKeyDown(.d)) angle_ -= turnSpeed * dt;
-        self.forward =
-            self.forward.rotateByAxisAngle(Y, angle_);
+    fn update(self: *Player, dt: f32, body_interface: *zphy.BodyInterface) void {
+        const turn_input = (if (rl.isKeyDown(.a)) turnSpeed else 0.0) - (if (rl.isKeyDown(.d)) turnSpeed else 0.0);
+        self.yaw += turn_input * dt;
 
-        // --- Horizontal Movement ---
-        var walk_: f32 = 0;
-        if (rl.isKeyDown(.w)) walk_ += moveSpeed * dt;
-        if (rl.isKeyDown(.s)) walk_ -= moveSpeed * dt;
-        self.position = self.position.add(self.forward.scale(walk_));
+        const walk_dist = (if (rl.isKeyDown(.w)) moveSpeed else 0.0) - (if (rl.isKeyDown(.s)) moveSpeed else 0.0);
 
-        // --- PHYSICS: Gravity ---
-        self.velocity = self.velocity.add(gravity.scale(dt));
-        self.position = self.position.add(self.velocity.scale(dt));
+        const forward = rl.Vector3.init(@sin(self.yaw), 0, @cos(self.yaw));
+        const target_vel = forward.scale(walk_dist);
+        const current_vel = body_interface.getLinearVelocity(self.body_id);
 
-        // --- Collision Checker System ---
-        const playerBounds = self.getBounds();
-        for (meshs) |mesh| {
-            if (@intFromPtr(self) == @intFromPtr(mesh.ptr)) continue;
-            const targetBounds = mesh.getBounds();
-            if (rl.checkCollisionBoxes(playerBounds, targetBounds)) {
-                // ถ้าชนวัตถุ ให้หยุดตกลงมา และวางเท้าบนวัตถุพอดี
-                self.position.y = targetBounds.max.y;
-                self.velocity.y = 0;
+        body_interface.setLinearVelocity(self.body_id, .{ target_vel.x, current_vel[1], target_vel.z });
 
-                if (rl.isKeyPressed(.space)) {
-                    self.velocity = self.velocity.add(jumpForce);
-                }
+        if (rl.isKeyPressed(.space)) {
+            if (@abs(current_vel[1]) < 0.1) {
+                body_interface.addImpulse(self.body_id, .{ 0, 8, 0 });
             }
         }
     }
 
-    fn draw(self: Player) void {
-        rl.drawBoundingBox(self.getBounds(), .red);
+    fn draw(self: Player, body_interface: *const zphy.BodyInterface) void {
+        const p = body_interface.getPosition(self.body_id);
 
         rl.gl.rlPushMatrix();
         defer rl.gl.rlPopMatrix();
@@ -76,176 +137,199 @@ const Player = struct {
         rl.beginShaderMode(self.shader);
         defer rl.endShaderMode();
 
-        rl.gl.rlTranslatef(self.position.x, self.position.y, self.position.z);
-        rl.gl.rlRotatef(self.angle() * 180.0 / std.math.pi, 0.0, 1.0, 0.0);
+        rl.gl.rlTranslatef(p[0], p[1], p[2]);
+        rl.gl.rlRotatef(self.yaw * 180.0 / std.math.pi, 0.0, 1.0, 0.0);
 
         const centerOffset = rl.Vector3.init(0.0, 0.0, 0.0);
-        rl.drawCylinder(centerOffset, radius, radius * 1.2, height, 12, .white);
-        rl.drawSphere(rl.Vector3.init(0.0, height, 0.5 * radius), 0.1, .white);
-        rl.drawCylinderWires(centerOffset, radius, radius * 1.2, height, 12, .white);
+        rl.drawCylinder(centerOffset, radius, radius, height, 12, .white);
+        rl.drawCylinderWires(centerOffset, radius, radius, height, 12, .white);
     }
 };
 
 const Ground = struct {
-    center: rl.Vector3,
+    body_id: zphy.BodyId,
     size: rl.Vector2,
-    bounds: rl.BoundingBox,
 
-    fn init(center: rl.Vector3, size: rl.Vector2) Ground {
+    fn init(center: rl.Vector3, size: rl.Vector2, physics_system: *zphy.PhysicsSystem) Ground {
+        const body_interface = physics_system.getBodyInterfaceMut();
+
+        const box_settings = zphy.BoxShapeSettings.create(.{ size.x / 2.0, 0.1, size.y / 2.0 }) catch unreachable;
+        defer box_settings.asShapeSettings().release();
+        const box_shape = box_settings.asShapeSettings().createShape() catch unreachable;
+        defer box_shape.release();
+
+        const body_id = body_interface.createAndAddBody(.{
+            .position = .{ center.x, center.y - 0.1, center.z, 1 },
+            .shape = box_shape,
+            .motion_type = .static,
+            .object_layer = object_layers.non_moving,
+        }, .activate) catch unreachable;
+
         return .{
-            .center = center,
+            .body_id = body_id,
             .size = size,
-            .bounds = .{
-                .min = .{ .x = center.x - size.x / 2.0, .y = center.y - 0.1, .z = center.z - size.y / 2.0 },
-                .max = .{ .x = center.x + size.x / 2.0, .y = center.y, .z = center.z + size.y / 2.0 },
-            },
         };
     }
 
-    fn getBounds(self: Ground) rl.BoundingBox {
-        return self.bounds;
-    }
-
-    fn draw(self: Ground) void {
-        rl.drawBoundingBox(self.getBounds(), .red);
-        rl.drawPlane(self.center, self.size, .green);
+    fn draw(self: Ground, body_interface: *const zphy.BodyInterface) void {
+        const p = body_interface.getPosition(self.body_id);
+        rl.drawPlane(rl.Vector3.init(p[0], p[1] + 0.1, p[2]), self.size, .green);
         rl.drawGrid(@intFromFloat(self.size.x), 1.0);
     }
-    fn update(self: *Ground, _: f32, _: []const Mesh) void {
-        _ = self;
-        // noop
-    }
+
+    fn update(_: *Ground, _: f32, _: *zphy.BodyInterface) void {}
 };
 
 const Box = struct {
-    position: rl.Vector3,
+    body_id: zphy.BodyId,
     size: rl.Vector3,
     color: rl.Color,
-    velocity: rl.Vector3 = rl.Vector3{ .x = 0, .y = 0, .z = 0 },
 
-    const gravity: rl.Vector3 = rl.Vector3.init(0.0, -9.8, 0.0);
+    fn init(pos: rl.Vector3, size: rl.Vector3, color: rl.Color, physics_system: *zphy.PhysicsSystem) Box {
+        const body_interface = physics_system.getBodyInterfaceMut();
 
-    fn getBounds(self: *const Box) rl.BoundingBox {
+        const box_settings = zphy.BoxShapeSettings.create(.{ size.x / 2.0, size.y / 2.0, size.z / 2.0 }) catch unreachable;
+        defer box_settings.asShapeSettings().release();
+        const box_shape = box_settings.asShapeSettings().createShape() catch unreachable;
+        defer box_shape.release();
+
+        const body_id = body_interface.createAndAddBody(.{
+            .position = .{ pos.x, pos.y, pos.z, 1 },
+            .shape = box_shape,
+            .motion_type = .dynamic,
+            .object_layer = object_layers.moving,
+        }, .activate) catch unreachable;
+
         return .{
-            .min = self.position.subtract(self.size.scale(0.5)),
-            .max = self.position.add(self.size.scale(0.5)),
+            .body_id = body_id,
+            .size = size,
+            .color = color,
         };
     }
 
-    fn update(self: *Box, dt: f32, meshs: []const Mesh) void {
-        // อัปเดตฟิสิกส์พื้นฐาน
-        self.velocity = self.velocity.add(gravity.scale(dt));
-        self.position = self.position.add(self.velocity.scale(dt));
+    fn draw(self: Box, body_interface: *const zphy.BodyInterface) void {
+        const p = body_interface.getPosition(self.body_id);
+        const q = body_interface.getRotation(self.body_id);
 
-        // การเช็ก Collision กับ Mesh อื่นๆ (เช่น พื้น หรือ กล่องใบอื่น)
-        const myBounds = self.getBounds();
-        for (meshs) |mesh| {
-            if (@intFromPtr(self) == @intFromPtr(mesh.ptr)) continue;
+        rl.gl.rlPushMatrix();
+        defer rl.gl.rlPopMatrix();
 
-            const targetBounds = mesh.getBounds();
-            if (rl.checkCollisionBoxes(myBounds, targetBounds)) {
-                // ถ้าชน (หลักๆ คือพื้น) ให้หยุด
-                if (self.position.y > targetBounds.max.y) {
-                    self.position.y = targetBounds.max.y + self.size.y / 2.0;
-                    self.velocity.y *= -0.1; // กระดอนนิดหน่อย
-                }
-            }
-        }
+        rl.gl.rlTranslatef(p[0], p[1], p[2]);
+
+        var angle_val: f32 = 0;
+        var axis = zm.f32x4(0, 1, 0, 0);
+        zm.quatToAxisAngle(zm.loadArr4(q), &axis, &angle_val);
+        rl.gl.rlRotatef(angle_val * 180.0 / std.math.pi, axis[0], axis[1], axis[2]);
+
+        rl.drawCube(rl.Vector3.zero(), self.size.x, self.size.y, self.size.z, self.color);
+        rl.drawCubeWires(rl.Vector3.zero(), self.size.x, self.size.y, self.size.z, .black);
     }
 
-    fn draw(self: Box) void {
-        rl.drawCube(self.position, self.size.x, self.size.y, self.size.z, self.color);
-        rl.drawCubeWires(self.position, self.size.x, self.size.y, self.size.z, .black);
-    }
+    fn update(_: *Box, _: f32, _: *zphy.BodyInterface) void {}
 };
 
 const Mesh = struct {
     ptr: *anyopaque,
-    updateFn: *const fn (ptr: *anyopaque, dt: f32, meshs: []const Mesh) void,
-    drawFn: *const fn (ptr: *anyopaque) void,
-    getBoundsFn: *const fn (ptr: *anyopaque) rl.BoundingBox,
+    updateFn: *const fn (ptr: *anyopaque, dt: f32, body_interface: *zphy.BodyInterface) void,
+    drawFn: *const fn (ptr: *anyopaque, body_interface: *const zphy.BodyInterface) void,
 
     fn init(ptr: anytype) Mesh {
         const T = @TypeOf(ptr);
         const PtrT = if (@typeInfo(T) == .pointer) T else *T;
         const gen = struct {
-            fn update(ctx: *anyopaque, dt: f32, meshs: []const Mesh) void {
+            fn update(ctx: *anyopaque, dt: f32, body_interface: *zphy.BodyInterface) void {
                 const self: PtrT = @ptrCast(@alignCast(ctx));
-                self.update(dt, meshs);
+                self.update(dt, body_interface);
             }
-            fn draw(ctx: *anyopaque) void {
+            fn draw(ctx: *anyopaque, body_interface: *const zphy.BodyInterface) void {
                 const self: PtrT = @ptrCast(@alignCast(ctx));
-                self.draw();
-            }
-            fn getBounds(ctx: *anyopaque) rl.BoundingBox {
-                const self: PtrT = @ptrCast(@alignCast(ctx));
-                return self.getBounds();
+                self.draw(body_interface);
             }
         };
         return .{
-            .ptr = @constCast(ptr), // บังคับเป็น mutable pointer เพื่อเก็บใน Mesh
+            .ptr = @constCast(ptr),
             .updateFn = gen.update,
             .drawFn = gen.draw,
-            .getBoundsFn = gen.getBounds,
         };
     }
 
-    fn update(self: Mesh, dt: f32, meshs: []const Mesh) void {
-        self.updateFn(self.ptr, dt, meshs);
+    fn update(self: Mesh, dt: f32, body_interface: *zphy.BodyInterface) void {
+        self.updateFn(self.ptr, dt, body_interface);
     }
 
-    fn draw(self: Mesh) void {
-        self.drawFn(self.ptr);
-    }
-
-    fn getBounds(self: Mesh) rl.BoundingBox {
-        return self.getBoundsFn(self.ptr);
+    fn draw(self: Mesh, body_interface: *const zphy.BodyInterface) void {
+        self.drawFn(self.ptr, body_interface);
     }
 };
 
 pub fn main() anyerror!void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    try zphy.init(allocator, .{});
+    defer zphy.deinit();
+
+    const layer_interface = MyBroadphaseLayerInterface.init();
+    const object_vs_broad_phase_filter = MyObjectVsBroadPhaseLayerFilter{};
+    const object_layer_pair_filter = MyObjectLayerPairFilter{};
+
+    var physics_system = try zphy.PhysicsSystem.create(
+        @ptrCast(&layer_interface),
+        @ptrCast(&object_vs_broad_phase_filter),
+        @ptrCast(&object_layer_pair_filter),
+        .{
+            .max_bodies = 1024,
+            .num_body_mutexes = 0,
+            .max_body_pairs = 1024,
+            .max_contact_constraints = 1024,
+        },
+    );
+    defer physics_system.destroy();
+
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
     const rand = prng.random();
 
     const screenWidth = 800;
     const screenHeight = 450;
 
-    rl.initWindow(screenWidth, screenHeight, "raylib-zig [3rd Person Player Refactored]");
+    rl.initWindow(screenWidth, screenHeight, "Zig Car GL - zphysics integration");
     defer rl.closeWindow();
 
     rl.setTargetFPS(60);
 
-    // เริ่มต้นแคลนนิ่งข้อมูลผู้เล่นเข้าระบบ Struct
     const normal_shader = try rl.loadShader("src/shaders/player.vert", "src/shaders/normal.frag");
     defer rl.unloadShader(normal_shader);
-    var player = Player.init(normal_shader);
-    var ground = Ground.init(rl.Vector3.init(0, 0, 0), rl.Vector2.init(20, 20));
+
+    var player = Player.init(normal_shader, physics_system);
+    var ground = Ground.init(rl.Vector3.init(0, 0, 0), rl.Vector2.init(20, 20), physics_system);
+
+    var boxes: [100]Box = undefined;
+    for (&boxes) |*box| {
+        box.* = Box.init(
+            rl.Vector3.init(
+                rand.float(f32) * 20.0 - 10.0,
+                rand.float(f32) * 40.0 + 10.0,
+                rand.float(f32) * 20.0 - 10.0,
+            ),
+            rl.Vector3.init(0.5 + rand.float(f32), 0.5 + rand.float(f32), 0.5 + rand.float(f32)),
+            rl.Color.init(rand.uintAtMost(u8, 255), rand.uintAtMost(u8, 255), rand.uintAtMost(u8, 255), 255),
+            physics_system,
+        );
+    }
 
     var mesh_list: [102]Mesh = undefined;
     mesh_list[0] = Mesh.init(&player);
     mesh_list[1] = Mesh.init(&ground);
-
-    var boxes: [100]Box = undefined;
-    for (&boxes, 2..) |*box, idx| {
-        box.* = Box{
-            .position = rl.Vector3.init(
-                rand.float(f32) * 20.0 - 10.0,
-                rand.float(f32) * 40.0 + 10.0, // กระจายบนฟ้า
-                rand.float(f32) * 20.0 - 10.0,
-            ),
-            .size = rl.Vector3.init(0.5 + rand.float(f32), 0.5 + rand.float(f32), 0.5 + rand.float(f32)),
-            .color = rl.Color.init(rand.uintAtMost(u8, 255), rand.uintAtMost(u8, 255), rand.uintAtMost(u8, 255), 255),
-        };
-        mesh_list[idx] = Mesh.init(box);
+    for (0..100) |i| {
+        mesh_list[i + 2] = Mesh.init(&boxes[i]);
     }
-
     const meshs: []const Mesh = &mesh_list;
 
-    // ตั้งค่ากล้อง 3D
     var camera = rl.Camera3D{
-        .position = .{ .x = 0.0, .y = 2.0, .z = -5.0 },
-        .target = player.position,
-        .up = .{ .x = 0.0, .y = 1.0, .z = 0.0 },
+        .position = rl.Vector3.init(0, 10, 10),
+        .target = rl.Vector3.init(0, 0, 0),
+        .up = rl.Vector3.init(0, 1, 0),
         .fovy = 45.0,
         .projection = .perspective,
     };
@@ -253,38 +337,34 @@ pub fn main() anyerror!void {
     while (!rl.windowShouldClose()) {
         const dt = rl.getFrameTime();
 
-        // UPDATE Logic (Update all meshes)
+        try physics_system.update(dt, .{});
+        const body_interface = physics_system.getBodyInterfaceMut();
+
         for (meshs) |mesh| {
-            mesh.update(dt, meshs);
+            mesh.update(dt, body_interface);
         }
 
-        // UPDATE Camera (Third Person)
+        // Camera update: pull position directly from physics
+        const p = body_interface.getPosition(player.body_id);
+        const player_pos = rl.Vector3.init(p[0], p[1], p[2]);
+        const camOffset = rl.Vector3.init(0.0, 5.0, -10.0).rotateByAxisAngle(rl.Vector3.init(0, 1, 0), player.yaw);
+        camera.position = player_pos.add(camOffset);
+        camera.target = player_pos;
+
+        rl.beginDrawing();
+        defer rl.endDrawing();
+
+        rl.clearBackground(.ray_white);
+
         {
-            const camDistance: f32 = 5.0;
-            const camHeight: f32 = 2.5;
-            camera.position = player.position.subtract(player.forward.scale(camDistance));
-            camera.position.y += camHeight;
-            camera.target = player.position.add(rl.Vector3.init(0.0, 0.5, 0.0)); // มองไปที่กลางตัว
-        }
+            camera.begin();
+            defer camera.end();
 
-        // DRAW Logic
-        {
-            rl.beginDrawing();
-            defer rl.endDrawing();
-
-            rl.clearBackground(.black);
-
-            {
-                rl.beginMode3D(camera);
-                defer rl.endMode3D();
-
-                for (meshs) |mesh| {
-                    mesh.draw();
-                }
+            for (meshs) |mesh| {
+                mesh.draw(body_interface);
             }
-
-            rl.drawText("Use WSDA to WALK | SPACE to JUMP", 10, 40, 20, .white);
-            rl.drawFPS(10, 10);
         }
+
+        rl.drawFPS(10, 10);
     }
 }
