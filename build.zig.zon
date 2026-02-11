@@ -41,8 +41,8 @@
             .hash = "zmath-0.11.0-dev-wjwivdMsAwD-xaLj76YHUq3t9JDH-X16xuMTmnDzqbu2",
         },
         .zphysics = .{
-            .url = "git+https://github.com/zig-gamedev/zphysics.git#cef47382fb548a770ad44c7c8a20e496a11df075",
-            .hash = "zphysics-0.2.0-dev-nZDEAI_fQgAEgTR_PnmxLaBEeYAqOi4GD644fPnJ9THh",
+            .url = "git+https://github.com/krist7599555/zphysics?ref=patch-1#00cbabbdae329e368a1c430d8bd02d1a258d3138",
+            .hash = "zphysics-0.2.0-dev-nZDEANvfQgD04nOPqL9KMokfgjzs_wPtHpoLscZScaOa",
         },
     },
     .paths = .{

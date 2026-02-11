@@ -100,6 +100,12 @@ const Player = struct {
             .shape = capsule_shape,
             .motion_type = .dynamic,
             .object_layer = object_layers.moving,
+// .allowed_DOFs = 0b010111,
+            .allowed_DOFs = @enumFromInt(0 |
+                @intFromEnum(zphy.AllowedDOFs.translation_x) |
+                @intFromEnum(zphy.AllowedDOFs.translation_y) |
+                @intFromEnum(zphy.AllowedDOFs.translation_z) |
+                @intFromEnum(zphy.AllowedDOFs.rotation_y)),
         }, .activate) catch unreachable;
 
         return Player{
