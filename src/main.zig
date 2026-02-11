@@ -12,8 +12,11 @@ pub fn main() anyerror!void {
     rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
 
+    var y: i32 = 200;
     // Main game loop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
+        y += 1;
+        if (y > screenHeight) y = 0;
         // Update
         //----------------------------------------------------------------------------------
         // TODO: Update your variables here
@@ -26,7 +29,7 @@ pub fn main() anyerror!void {
 
         rl.clearBackground(.white);
 
-        rl.drawText("Congrats! You created your first window!", 190, 200, 20, .light_gray);
+        rl.drawText("Congrats! You created your first window!", 190, y, 20, .light_gray);
         //----------------------------------------------------------------------------------
     }
 }
