@@ -3,23 +3,26 @@ const rl = @import("raylib");
 const zphy = @import("zphysics");
 const zm = @import("zmath");
 const zphy_helper = @import("./zphy_helper.zig");
+const splat = @import("./vec.zig").splat;
+const vec3 = @import("./vec.zig").vec3;
+const vec4 = @import("./vec.zig").vec4;
+const Vec2 = @Vector(2, f32);
+const Vec3 = @Vector(3, f32);
+const Vec4 = @Vector(4, f32);
 
-const X = zm.Vec{ 1, 0, 0, 0 };
-const Y = zm.Vec{ 0, 1, 0, 0 };
-const Z = zm.Vec{ 0, 0, 1, 0 };
 const DT: f32 = 1.0 / 60.0; // delta time
 
 const PhyRef = struct {
     body_id: zphy.BodyId,
     interface: *zphy.BodyInterface,
-    fn position(self: *const @This()) zm.Vec {
-        return zm.loadArr3(self.interface.getPosition(self.body_id));
+    fn position(self: *const @This()) Vec3 {
+        return vec3(self.interface.getPosition(self.body_id));
     }
-    fn rotation(self: *const @This()) zm.Vec {
-        return zm.loadArr4(self.interface.getRotation(self.body_id));
+    fn rotation(self: *const @This()) Vec4 {
+        return vec4(self.interface.getRotation(self.body_id));
     }
-    fn velocity(self: *const @This()) zm.Vec {
-        return zm.loadArr3(self.interface.getLinearVelocity(self.body_id));
+    fn velocity(self: *const @This()) Vec3 {
+        return vec3(self.interface.getLinearVelocity(self.body_id));
     }
 };
 
@@ -34,7 +37,7 @@ const Player = struct {
     pub fn init(shader: rl.Shader, physics_system: *zphy.PhysicsSystem) Player {
         const body_interface = physics_system.getBodyInterfaceMut();
 
-        const box_shape = zphy_helper.createBoxShape(.{ size.x, size.y, size.z }) catch unreachable;
+        const box_shape = zphy_helper.createBoxShape(vec3(size)) catch unreachable;
 
         const body_id = body_interface.createAndAddBody(.{
             .position = .{ 0, size.y / 2.0, 0, 1 },
@@ -57,7 +60,10 @@ const Player = struct {
         }, .activate) catch unreachable;
 
         return Player{
-            .ref = .{ .body_id = body_id, .interface = body_interface },
+            .ref = .{
+                .body_id = body_id,
+                .interface = body_interface,
+            },
             .shader = shader,
         };
     }
@@ -65,41 +71,52 @@ const Player = struct {
     fn update(self: *Player, dt: f32, body_interface: *zphy.BodyInterface) void {
         _ = body_interface;
 
-        // Handling Turning via Rotation State
-        const turn_input = (if (rl.isKeyDown(.a)) turnSpeed else 0.0) - (if (rl.isKeyDown(.d)) turnSpeed else 0.0);
-        if (turn_input != 0) {
-            const current_q = self.ref.rotation();
-            const dq = zm.quatFromAxisAngle(Y, turn_input * dt);
-            const new_q = zm.qmul(dq, current_q); // Rotate around world Y
-            self.ref.interface.setRotation(self.ref.body_id, zm.vecToArr4(new_q), .activate);
-        }
+        const turn_input: f32 = zphy_helper.getAxisInput(.a, .d);
+        const walk_input: f32 = zphy_helper.getAxisInput(.w, .s);
 
-        const walk_dist = (if (rl.isKeyDown(.w)) moveSpeed else 0.0) - (if (rl.isKeyDown(.s)) moveSpeed else 0.0);
+        const old_rotation: Vec4 = self.ref.rotation();
+        const new_rotation: Vec4 = zphy_helper.rotateY(old_rotation, turn_input * turnSpeed * dt);
 
-        // Compute forward from current rotation
-        const forward = zm.rotate(self.ref.rotation(), Z);
-        const current_vel = self.ref.velocity();
+        const new_direction = zm.normalize4(zm.rotate(new_rotation, zm.f32x4(0, 0, 1, 0)));
 
-        var gravity_scale: f32 = 1.0;
-        if (current_vel[1] < -0.1) {
-            gravity_scale = 2.5; // Fast fall: ขาลงรวดเร็ว
-        } else if (current_vel[1] > 0.1 and !rl.isKeyDown(.space)) {
-            gravity_scale = 4.0; // Early release "Low Jump"
-        }
+        // velocity
+        const old_v = vec4(self.ref.velocity());
+        const new_v = blk: {
+            var gravity_scale: f32 = 1.0;
+            const is_downward = old_v[1] < -0.1;
+            const is_upward = old_v[1] > 0.1;
+            if (is_downward) gravity_scale = 2.5; // Fast fall: ขาลงรวดเร็ว
+            if (is_upward and !rl.isKeyDown(.space)) gravity_scale = 4.0; // Early release "Low Jump"
+            const gravity: Vec4 = vec4(.{ 0, -9.8, 0, 0 }) * splat(gravity_scale);
 
-        // Apply extra gravity velocity change
-        // Note: engine already applied 1.0 gravity. we add (scale - 1.0) more.
-        const extra_gravity = -9.81 * (gravity_scale - 1.0) * dt;
-        var target_vel_y = current_vel[1] + extra_gravity;
-
-        if (rl.isKeyPressed(.space)) {
-            // Ground check: check if vertical velocity is near zero or negative
-            if (@abs(current_vel[1]) < 0.1) {
-                target_vel_y = 10.0; // Upward impulse: ขาขึ้นนุ่มนวล
+            var new_v = old_v + gravity * splat(dt) + new_direction * splat(dt);
+            const is_onground = @abs(old_v[1]) < 0.1;
+            if (is_onground and rl.isKeyPressed(.space)) {
+                new_v[1] = 10.0;
             }
-        }
+            break :blk new_v;
+        };
 
-        self.ref.interface.setLinearVelocity(self.ref.body_id, .{ forward[0] * walk_dist, target_vel_y, forward[2] * walk_dist });
+        // s = distance
+        const old_s = vec4(self.ref.position());
+        const new_s: Vec4 = old_s +
+            new_direction * splat(moveSpeed * walk_input * dt) +
+            new_v * splat(dt);
+
+        std.debug.print("forward = {}, {}, {}, {}\n", .{ new_direction[0], new_direction[1], new_direction[2], new_direction[3] });
+        std.debug.print("old_pos = {}, {}, {}\n", .{ old_s[0], old_s[1], old_s[2] });
+        std.debug.print("new_pos = {}, {}, {}\n", .{ new_s[0], new_s[1], new_s[2] });
+
+        const p = new_s;
+        const r = new_rotation;
+        const v = new_v;
+        self.ref.interface.setPositionRotationAndVelocity(
+            self.ref.body_id,
+            .{ p[0], p[1], p[2] },
+            .{ r[0], r[1], r[2], r[3] },
+            .{ v[0], v[1], v[2] },
+            .{ 0, 0, 0 },
+        );
     }
 
     fn draw(self: Player, body_interface: *const zphy.BodyInterface) void {
@@ -115,13 +132,13 @@ const Player = struct {
 
         rl.gl.rlTranslatef(p[0], p[1], p[2]);
 
-        var angle_val: f32 = 0;
-        var axis: zm.Vec = undefined;
-        zm.quatToAxisAngle(q, &axis, &angle_val);
+        var angle_val: f32 = undefined;
+        var axis: Vec4 = undefined;
+        zm.quatToAxisAngle(q, @ptrCast(&axis), &angle_val);
         rl.gl.rlRotatef(angle_val * 180.0 / std.math.pi, axis[0], axis[1], axis[2]);
 
-        rl.drawCube(rl.Vector3.zero(), size.x, size.y, size.z, .red);
-        rl.drawCubeWires(rl.Vector3.zero(), size.x, size.y, size.z, .maroon);
+        rl.drawCubeV(rl.Vector3.zero(), size, .red);
+        rl.drawCubeWiresV(rl.Vector3.zero(), size, .maroon);
     }
 };
 
@@ -195,8 +212,8 @@ const Box = struct {
         zm.quatToAxisAngle(q, &axis, &angle_val);
         rl.gl.rlRotatef(angle_val * 180.0 / std.math.pi, axis[0], axis[1], axis[2]);
 
-        rl.drawCube(rl.Vector3.zero(), self.size.x, self.size.y, self.size.z, self.color);
-        rl.drawCubeWires(rl.Vector3.zero(), self.size.x, self.size.y, self.size.z, .black);
+        rl.drawCubeV(rl.Vector3.zero(), self.size, self.color);
+        rl.drawCubeWiresV(rl.Vector3.zero(), self.size, .black);
     }
 
     fn update(_: *Box, _: f32, _: *zphy.BodyInterface) void {}
