@@ -69,8 +69,14 @@ pub fn main() anyerror!void {
                 rl.drawCylinderWires(playerPos, 0.5, 0.7, 1, 12, .white);
 
                 // วาดลูกศรเล็กน้อยบอกทิศหน้า
-                const nosePos = playerPos.add(forward.scale(0.6));
+                const nosePos = playerPos
+                    .add(rl.Vector3.init(0.0, 1.0, 0.0))
+                    .add(forward.scale(0.5));
                 rl.drawSphere(nosePos, 0.1, .red);
+                // const nosePo2 = playerPos
+                //     .add(rl.Vector3.init(0.0, 1.0, 0.0))
+                //     .add(forward.scale(-0.5));
+                // rl.drawSphere(nosePo2, 0.1, .red);
             }
 
             rl.drawText("Use WSDA to WALK", 10, 40, 20, .white);
