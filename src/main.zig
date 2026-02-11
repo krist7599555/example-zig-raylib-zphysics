@@ -59,6 +59,12 @@ const Player = struct {
     }
 };
 
+const Ground = struct {
+    fn draw(_: Ground) void {
+        rl.drawPlane(Vec3.init(0.0, 0.0, 0.0), Vec2.init(20, 20), .green);
+        rl.drawGrid(20, 1.0);
+    }
+};
 pub fn main() anyerror!void {
     const screenWidth = 800;
     const screenHeight = 450;
@@ -75,6 +81,7 @@ pub fn main() anyerror!void {
         .velocity = Vec3.zero(),
         // .angle = 0,
     };
+    const ground = Ground{};
 
     // ตั้งค่ากล้อง 3D
     var camera = rl.Camera3D{
@@ -114,9 +121,7 @@ pub fn main() anyerror!void {
                 rl.beginMode3D(camera);
                 defer rl.endMode3D();
 
-                rl.drawPlane(Vec3.init(0.0, 0.0, 0.0), Vec2.init(20, 20), .green);
-                rl.drawGrid(20, 1.0);
-
+                ground.draw();
                 player.draw(normal_shader);
             }
 
