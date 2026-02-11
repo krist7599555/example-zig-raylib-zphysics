@@ -1,5 +1,7 @@
 const rl = @import("raylib");
 const std = @import("std");
+const Vec3 = rl.Vector3;
+const Vec2 = rl.Vector2;
 
 pub fn main() anyerror!void {
     const screenWidth = 800;
@@ -25,31 +27,41 @@ pub fn main() anyerror!void {
         .projection = .perspective,
     };
 
+    // Load Shader (ใช้ทั้ง Vertex และ Fragment เพื่อส่งค่า Normal)
+    const normal_shader = try rl.loadShader("src/shaders/player.vert", "src/shaders/normal.frag");
+    defer rl.unloadShader(normal_shader);
+
     while (!rl.windowShouldClose()) {
         const dt = rl.getFrameTime();
+        // UPDATE
+        {
+            // --- UPDATE: Movement ---
+            var forward: rl.Vector3 = undefined;
+            {
+                if (rl.isKeyDown(.a)) playerAngle += turnSpeed * dt;
+                if (rl.isKeyDown(.d)) playerAngle -= turnSpeed * dt;
+                forward = rl.Vector3
+                    .init(std.math.sin(playerAngle), 0.0, std.math.cos(playerAngle))
+                    .normalize();
 
-        // --- UPDATE: Movement ---
-        if (rl.isKeyDown(.a)) playerAngle += turnSpeed * dt;
-        if (rl.isKeyDown(.d)) playerAngle -= turnSpeed * dt;
+                if (rl.isKeyDown(.w)) {
+                    playerPos = playerPos.add(forward.scale(1.0 * moveSpeed * dt));
+                }
+                if (rl.isKeyDown(.s)) {
+                    playerPos = playerPos.add(forward.scale(-1.0 * moveSpeed * dt));
+                }
+            }
 
-        // คำนวณทิศทางการเคลื่อนที่ตามมุมที่หันหน้า
-        const forward = rl.Vector3.init(std.math.sin(playerAngle), 0.0, std.math.cos(playerAngle));
+            // --- UPDATE: Camera (Third Person) ---
+            {
+                const camDistance: f32 = 5.0;
+                const camHeight: f32 = 2.5;
 
-        if (rl.isKeyDown(.w)) {
-            playerPos = playerPos.add(forward.scale(moveSpeed * dt));
+                camera.position = playerPos.subtract(forward.scale(camDistance));
+                camera.position.y += camHeight;
+                camera.target = playerPos; // มองไปที่ตัวผู้เล่น
+            }
         }
-        if (rl.isKeyDown(.s)) {
-            playerPos = playerPos.subtract(forward.scale(moveSpeed * dt));
-        }
-
-        // --- UPDATE: Camera (Third Person) ---
-        // วางกล้องไว้หลังผู้เล่นที่ระยะห่างระดับหนึ่ง
-        const camDistance: f32 = 5.0;
-        const camHeight: f32 = 2.5;
-
-        camera.position = playerPos.subtract(forward.scale(camDistance));
-        camera.position.y += camHeight;
-        camera.target = playerPos; // มองไปที่ตัวผู้เล่น
 
         // --- DRAW ---
         {
@@ -69,13 +81,16 @@ pub fn main() anyerror!void {
                 {
                     rl.gl.rlPushMatrix();
                     defer rl.gl.rlPopMatrix();
+                    rl.beginShaderMode(normal_shader);
+                    defer rl.endShaderMode();
 
                     rl.gl.rlTranslatef(playerPos.x, playerPos.y, playerPos.z);
                     rl.gl.rlRotatef(playerAngle * 180.0 / std.math.pi, 0.0, 1.0, 0.0);
 
-                    rl.drawCylinder(rl.Vector3.zero(), 0.5, 0.7, 1.0, 12, .gold);
+                    rl.drawCylinder(rl.Vector3.zero(), 0.5, 0.7, 1.0, 12, .white);
+                    rl.drawSphere(rl.Vector3.init(0.0, 1.0, 0.5), 0.1, .white);
+
                     rl.drawCylinderWires(rl.Vector3.zero(), 0.5, 0.7, 1.0, 12, .white);
-                    rl.drawSphere(rl.Vector3.init(0.0, 1.0, 0.5), 0.1, .red);
                 }
             }
 
