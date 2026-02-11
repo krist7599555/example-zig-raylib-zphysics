@@ -146,7 +146,24 @@ const ContactListener = extern struct {
 };
 // END copy
 
-pub fn createPhysicsSystem(allocator: std.mem.Allocator) !*zphy.PhysicsSystem {
+pub const PhysicsContext = struct {
+    allocator: std.mem.Allocator,
+    physics_system: *zphy.PhysicsSystem,
+    broad_phase_layer_interface: *BroadPhaseLayerInterface,
+    object_vs_broad_phase_layer_filter: *ObjectVsBroadPhaseLayerFilter,
+    object_layer_pair_filter: *ObjectLayerPairFilter,
+    contact_listener: *ContactListener,
+
+    pub fn destroy(self: *PhysicsContext) void {
+        self.physics_system.destroy();
+        self.allocator.destroy(self.broad_phase_layer_interface);
+        self.allocator.destroy(self.object_vs_broad_phase_layer_filter);
+        self.allocator.destroy(self.object_layer_pair_filter);
+        self.allocator.destroy(self.contact_listener);
+    }
+};
+
+pub fn createPhysicsSystem(allocator: std.mem.Allocator) !PhysicsContext {
     const broad_phase_layer_interface = try allocator.create(BroadPhaseLayerInterface);
     broad_phase_layer_interface.* = BroadPhaseLayerInterface.init();
 
@@ -171,7 +188,14 @@ pub fn createPhysicsSystem(allocator: std.mem.Allocator) !*zphy.PhysicsSystem {
         },
     );
 
-    return physics_system;
+    return PhysicsContext{
+        .allocator = allocator,
+        .physics_system = physics_system,
+        .broad_phase_layer_interface = broad_phase_layer_interface,
+        .object_vs_broad_phase_layer_filter = object_vs_broad_phase_layer_filter,
+        .object_layer_pair_filter = object_layer_pair_filter,
+        .contact_listener = contact_listener,
+    };
 }
 
 // END Copy

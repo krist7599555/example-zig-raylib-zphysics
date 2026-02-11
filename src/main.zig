@@ -60,10 +60,13 @@ const Player = struct {
     pub fn init(shader: rl.Shader, physics_system: *zphy.PhysicsSystem) Player {
         const START_Y = 5;
         const body_interface = physics_system.getBodyInterfaceMut();
+        const shape = zphy_helper.createBoxShape(vec3(size)) catch unreachable;
+        defer shape.release();
+
         const body_id = body_interface.createAndAddBody(.{
             .position = .{ 0, size.y / 2.0 + START_Y, 0, 1 },
             .rotation = .{ 0, 0, 0, 1 },
-            .shape = zphy_helper.createBoxShape(vec3(size)) catch unreachable,
+            .shape = shape,
             .motion_type = .dynamic,
             .object_layer = zphy_helper.object_layers.moving,
             .allowed_DOFs = @enumFromInt(0 |
@@ -157,10 +160,13 @@ const Ground = struct {
 
     fn init(center: rl.Vector3, size: rl.Vector2, physics_system: *zphy.PhysicsSystem) Ground {
         const body_interface = physics_system.getBodyInterfaceMut();
+        const shape = zphy_helper.createBoxShape(.{ size.x, 0.1, size.y }) catch unreachable;
+        defer shape.release();
+
         const body_id = body_interface.createAndAddBody(.{
             .position = .{ center.x, center.y - 0.1, center.z, 1 },
             .rotation = .{ 0, 0, 0, 1 },
-            .shape = zphy_helper.createBoxShape(.{ size.x, 0.1, size.y }) catch unreachable,
+            .shape = shape,
             .motion_type = .static,
             .object_layer = zphy_helper.object_layers.non_moving,
         }, .activate) catch unreachable;
@@ -190,9 +196,12 @@ const Box = struct {
 
     fn init(pos: rl.Vector3, size: rl.Vector3, color: rl.Color, physics_system: *zphy.PhysicsSystem) Box {
         const body_interface = physics_system.getBodyInterfaceMut();
+        const shape = zphy_helper.createBoxShape(.{ size.x, size.y, size.z }) catch unreachable;
+        defer shape.release();
+
         const body_id = body_interface.createAndAddBody(.{
             .position = .{ pos.x, pos.y, pos.z, 1 },
-            .shape = zphy_helper.createBoxShape(.{ size.x, size.y, size.z }) catch unreachable,
+            .shape = shape,
             .motion_type = .dynamic,
             .object_layer = zphy_helper.object_layers.moving,
         }, .activate) catch unreachable;
@@ -263,9 +272,10 @@ pub fn main() anyerror!void {
     // const object_vs_broad_phase_filter = MyObjectVsBroadPhaseLayerFilter{};
     // const object_layer_pair_filter = MyObjectLayerPairFilter{};
 
-    var physics_system = try zphy_helper.createPhysicsSystem(allocator);
-    defer physics_system.destroy();
+    var physics_ctx = try zphy_helper.createPhysicsSystem(allocator);
+    defer physics_ctx.destroy();
 
+    const physics_system = physics_ctx.physics_system;
     physics_system.setGravity(.{ 0, -EARTH_GRAVITY, 0 });
 
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
