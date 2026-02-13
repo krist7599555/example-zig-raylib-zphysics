@@ -72,7 +72,7 @@ pub fn main() !void {
         _ = try game_world.createBody(.{
             .position = .{
                 Util.randomFloat(random, -20, 20),
-                3 + x,
+                4 + x,
                 Util.randomFloat(random, -20, 20),
                 0,
             },
@@ -82,7 +82,8 @@ pub fn main() !void {
             }),
             .motion_type = .dynamic,
             .material = try Util.createMaterialFromColor(Util.randomColor(random)),
-            // .wires = rl.Color.white,
+            // .wires = rl.Color.white,A
+            .restitution = 0.3, // Coefficient of restitution https://en.wikipedia.org/wiki/Coefficient_of_restitution
         });
     }
 
@@ -116,7 +117,6 @@ pub fn main() !void {
             rl.clearBackground(.dark_blue);
 
             shadow_mapper.render_game_world(&game_world);
-
             {
                 rl.beginMode3D(camera);
                 defer rl.endMode3D();

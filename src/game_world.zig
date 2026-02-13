@@ -76,6 +76,8 @@ pub const GameWorld = struct {
         }
         const motion: zphy.MotionType = args.motion_type;
         const tint: rl.Color = if (@hasField(@TypeOf(args), "tint")) args.tint else rl.Color.white;
+        const restitution: f32 = if (@hasField(@TypeOf(args), "restitution")) args.restitution else 0.0;
+        const linear_damping: f32 = if (@hasField(@TypeOf(args), "linear_damping")) args.linear_damping else 0.05;
 
         const ObjectLayer = @import("./jolt.zig").object_layers;
         const body_id = try game.body_interface.createAndAddBody(.{
@@ -87,6 +89,8 @@ pub const GameWorld = struct {
                 .static => ObjectLayer.non_moving,
                 .dynamic, .kinematic => ObjectLayer.moving,
             },
+            .restitution = restitution, // High bounce
+            .linear_damping = linear_damping, // Low air resistance
         }, .activate);
 
         const mesh = shape_instance.generateMesh();

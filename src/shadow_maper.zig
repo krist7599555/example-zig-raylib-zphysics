@@ -34,6 +34,7 @@ pub const ShadowMapper = struct {
         );
         shadowShader.locs[@intFromEnum(rl.ShaderLocationIndex.vector_view)] = rl.getShaderLocation(shadowShader, "viewPos");
         var lightDir = rl.Vector3.init(0.35, -1.0, -0.35).normalize();
+{
         const lightColor = rl.Color.white;
         const lightColorNormalized = rl.colorNormalize(lightColor);
         const lightDirloc = rl.getShaderLocation(shadowShader, "lightDir");
@@ -43,10 +44,9 @@ pub const ShadowMapper = struct {
         const ambientLoc = rl.getShaderLocation(shadowShader, "ambient");
         const ambient: [4]f32 = [4]f32{ 0.1, 0.1, 0.1, 1.0 };
         rl.setShaderValue(shadowShader, ambientLoc, &ambient, .vec4);
+}
 
-        const lightVPLoc = rl.getShaderLocation(shadowShader, "lightVP");
-        const shadowMapLoc = rl.getShaderLocation(shadowShader, "shadowMap");
-        const shadowMapResolution = 1024;
+                const shadowMapResolution = 1024 * 4; // change this to mode tezture size
         const res: [1]i32 = [1]i32{shadowMapResolution};
         const shadowMapResolutionLoc = rl.getShaderLocation(shadowShader, "shadowMapResolution");
         rl.setShaderValue(shadowShader, shadowMapResolutionLoc, &res, .int);
@@ -57,14 +57,14 @@ pub const ShadowMapper = struct {
             .position = lightDir.scale(-15.0),
             .target = rl.Vector3.zero(),
             .up = .{ .x = 0.0, .y = 1.0, .z = 0.0 },
-            .fovy = 70.0, // Try Change this to fix shadow error
+            .fovy = 60.0, // Try Change this to fix shadow error (low = no shadow, hi = too dark)
             .projection = .orthographic,
         };
 
         return ShadowMapper{
             .lightCam = lightCam,
-            .lightVPLoc = lightVPLoc,
-            .shadowMapLoc = shadowMapLoc,
+            .lightVPLoc = rl.getShaderLocation(shadowShader, "lightVP"),
+            .shadowMapLoc = rl.getShaderLocation(shadowShader, "shadowMap"),
             .shadowMap = shadowMap,
             .shadowShader = shadowShader,
             .shadowMapResolution = shadowMapResolution,
@@ -79,19 +79,21 @@ pub const ShadowMapper = struct {
     pub fn render_game_world(self: *ShadowMapper, game: *GameWorld) void {
         var lightView: rl.Matrix = undefined;
         var lightProj: rl.Matrix = undefined;
+
+        {
         rl.beginTextureMode(self.shadowMap);
-        rl.clearBackground(.white);
+defer         rl.endTextureMode();
         rl.beginMode3D(self.lightCam);
+defer rl.endMode3D();
+
         lightView = rl.gl.rlGetMatrixModelview();
         lightProj = rl.gl.rlGetMatrixProjection();
 
+rl.clearBackground(.white);
         game.draw();
+}
 
-        rl.endMode3D();
-        rl.endTextureMode();
-        const lightViewProj: rl.Matrix = lightView.multiply(lightProj);
-
-        rl.clearBackground(.black);
+                const lightViewProj: rl.Matrix = lightView.multiply(lightProj);
 
         rl.setShaderValueMatrix(self.shadowShader, self.lightVPLoc, lightViewProj);
 
@@ -118,6 +120,7 @@ pub const ShadowMapper = struct {
 
         if (target.id > 0) {
             rl.gl.rlEnableFramebuffer(target.id);
+defer rl.gl.rlDisableFramebuffer();
 
             // Create depth texture
             // We don't need a color texture for the shadowmap
@@ -132,8 +135,6 @@ pub const ShadowMapper = struct {
 
             // Check if FBO is complete with attachments (valid)
             if (rl.gl.rlFramebufferComplete(target.id)) std.log.info("FBO: [ID {d}] Framebuffer object created successfully", .{target.id});
-
-            rl.gl.rlDisableFramebuffer();
         } else std.log.warn("FBO: Framebuffer object cannot be created", .{});
 
         return target;

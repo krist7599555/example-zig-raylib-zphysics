@@ -64,6 +64,10 @@ void main()
     // Instead of testing if just one point is closer to the current point,
     // we test the surrounding points as well.
     // This blurs shadow edges, hiding aliasing artifacts.
+    
+    // 3. ใช้ PCF (Percentage Closer Filtering)
+    // แทนที่จะเช็คแค่พิกเซลเดียวใน Shadow Map ให้เช็คพิกเซลรอบๆ แล้วนำมาเฉลี่ยกัน จะช่วยให้ขอบเงาดูนุ่มนวลขึ้น (Soft Shadows)
+    // เพิ่มโค้ดนี้ใน Fragment Shader ของคุณ:
     vec2 texelSize = vec2(1.0f / float(shadowMapResolution));
     for (int x = -1; x <= 1; x++)
     {
