@@ -14,7 +14,7 @@ const Vec4 = @Vector(4, f32);
 
 const upVector = rl.Vector3{ .x = 0, .y = 1, .z = 0 };
 
-const Player = struct {
+pub const Player = struct {
     height: f32,
     radius: f32,
     halfHeight: f32,
