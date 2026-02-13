@@ -49,7 +49,9 @@ pub fn main() !void {
         .projection = .perspective,
     };
 
-    // var shadowMapper = Render.ShadowMapper.init();
+    const ShadowMapper = @import("./shadow_maper.zig").ShadowMapper;
+    var shadow_mapper = try ShadowMapper.init();
+    defer shadow_mapper.deinit();
 
     const body_interface = jolt_wrapper.physics_system.getBodyInterfaceMut();
     _ = body_interface;
@@ -91,6 +93,10 @@ pub fn main() !void {
         &camera,
     );
 
+    for (game_world.game_objects.items) |obj| {
+        shadow_mapper.inject_shadow_shader(obj.model);
+    }
+
     jolt_wrapper.physics_system.optimizeBroadPhase();
 
     while (!rl.windowShouldClose()) {
@@ -99,6 +105,8 @@ pub fn main() !void {
             const dt = rl.getFrameTime();
             jolt_wrapper.update(dt); // update physic by 1/60
             player.update();
+
+            shadow_mapper.update_camera(player.headCamera.*);
         }
         {
             // DRAW
@@ -106,6 +114,8 @@ pub fn main() !void {
             defer rl.endDrawing();
 
             rl.clearBackground(.dark_blue);
+
+            shadow_mapper.render_game_world(&game_world);
 
             {
                 rl.beginMode3D(camera);

@@ -106,4 +106,10 @@ pub const GameWorld = struct {
         });
         return body_id;
     }
+    pub fn getObj(self: *@This(), body_id: zphy.BodyId) ?GameObject {
+        for (self.game_objects.items) |obj| {
+            if (obj.body_id == body_id) return obj;
+        }
+        return undefined;
+    }
 };
