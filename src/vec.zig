@@ -1,4 +1,5 @@
 const std = @import("std");
+const rl = @import("raylib");
 
 pub const Vec2 = @Vector(2, f32);
 pub const Vec3 = @Vector(3, f32);
@@ -57,4 +58,28 @@ pub fn vec4(obj: anytype) Vec4 {
 pub fn vec3(obj: anytype) Vec3 {
     const res = vec4(obj);
     return .{ res[0], res[1], res[2] };
+}
+
+pub fn vec4jtr(obj: anytype) rl.Vector4 {
+    const T = @TypeOf(obj);
+    const info = @typeInfo(T);
+    if (info == .vector and info.vector.child == f32) {
+        const len = info.vector.len;
+        const x = if (len > 0) obj[0] else 0.0;
+        const y = if (len > 1) obj[1] else 0.0;
+        const z = if (len > 2) obj[2] else 0.0;
+        const w = if (len > 3) obj[3] else 0.0;
+        return rl.Vector4.init(x, y, z, w);
+    }
+    @compileError("Unsupported type for vec4: " ++ @typeName(T));
+}
+
+pub fn vec3jtr(obj: anytype) rl.Vector3 {
+    const res = vec4jtr(obj);
+    return rl.Vector3.init(res.x, res.y, res.z);
+}
+
+pub fn vec2jtr(obj: anytype) rl.Vector2 {
+    const res = vec4jtr(obj);
+    return rl.Vector2.init(res.x, res.y);
 }
