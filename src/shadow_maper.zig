@@ -57,7 +57,7 @@ pub const ShadowMapper = struct {
             .position = lightDir.scale(-15.0),
             .target = rl.Vector3.zero(),
             .up = .{ .x = 0.0, .y = 1.0, .z = 0.0 },
-            .fovy = 20.0,
+            .fovy = 70.0, // Try Change this to fix shadow error
             .projection = .orthographic,
         };
 
