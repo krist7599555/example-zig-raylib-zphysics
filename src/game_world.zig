@@ -1,6 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
+const Util = @import("./util.zig");
 const vec4 = @import("./vec.zig").vec4;
 
 const DIFFUSE_IDX: usize = @as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE));
@@ -8,6 +9,7 @@ const DIFFUSE_IDX: usize = @as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE));
 pub const GameObject = struct {
     model: rl.Model,
     tint: rl.Color = rl.Color.white,
+    wires: ?rl.Color = undefined,
     body_id: zphy.BodyId,
     fn getColor(self: @This()) rl.Color {
         return self.model.materials[0].maps[DIFFUSE_IDX].color;
@@ -28,6 +30,16 @@ pub const GameObject = struct {
         self.setColor(material.maps[DIFFUSE_IDX].color);
         self.setShader(material.shader);
     }
+    fn draw(self: @This()) void {
+        self.model.draw(rl.Vector3.zero(), 1.0, self.tint);
+
+        if (self.wires) |wires| {
+            const color = self.getColor();
+            self.setColor(wires);
+            self.model.drawWires(rl.Vector3.zero(), 1.0, .white);
+            self.setColor(color);
+        }
+    }
 };
 
 pub const GameWorld = struct {
@@ -47,25 +59,15 @@ pub const GameWorld = struct {
 
     pub fn draw(self: *@This()) void {
         for (self.game_objects.items) |obj| {
-            const pos: [3]f32 = self.body_interface.getPosition(obj.body_id);
-            const rot: [4]f32 = self.body_interface.getRotation(obj.body_id);
-
             rl.gl.rlPushMatrix();
             defer rl.gl.rlPopMatrix();
 
-            rl.gl.rlTranslatef(pos[0], pos[1], pos[2]);
-            var axis: rl.Vector3 = undefined;
-            var angle: f32 = undefined;
-            rl.Quaternion
-                .initVec(vec4(rot))
-                .toAxisAngle(&axis, &angle);
-            const rad2deg = 180.0 / std.math.pi;
-            rl.gl.rlRotatef(angle * rad2deg, axis.x, axis.y, axis.z); // rlgl ใช้หน่วยองศา (Degree)
+            Util.applyBodyTransform(self.body_interface, obj.body_id);
 
-            rl.drawModel(obj.model, rl.Vector3.zero(), 1.0, obj.tint);
+            obj.draw();
         }
     }
-    pub fn create_and_add(game: *@This(), args: anytype) !zphy.BodyId {
+    pub fn createBody(game: *@This(), args: anytype) !zphy.BodyId {
         const shape_instance = args.shape;
         const pos = if (@hasField(@TypeOf(args), "position")) args.position else [4]f32{ 0, 0, 0, 0 };
         const rot = if (@hasField(@TypeOf(args), "rotation")) args.rotation else [4]f32{ 0, 0, 0, 1 };
@@ -100,6 +102,7 @@ pub const GameWorld = struct {
             .model = model,
             .tint = tint,
             .body_id = body_id,
+            .wires = if (@hasField(@TypeOf(args), "wires")) args.wires else undefined,
         });
         return body_id;
     }

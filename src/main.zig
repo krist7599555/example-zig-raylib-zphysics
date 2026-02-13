@@ -16,6 +16,7 @@ const Vec2 = @Vector(2, f32);
 const Vec3 = @Vector(3, f32);
 const Vec4 = @Vector(4, f32);
 const Player = @import("./player.zig").Player;
+const Util = @import("./util.zig");
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -56,42 +57,30 @@ pub fn main() !void {
     const SphereShape = @import("./shape_object.zig").SphereShape;
     const PlaneShape = @import("./shape_object.zig").PlaneShape;
 
-    _ = try game_world.create_and_add(.{
+    _ = try game_world.createBody(.{
         .position = .{ 0, 0, 0, 0 },
-        .shape = PlaneShape.init(.{ .size = .{ 20, 20 } }),
-        .tint = rl.Color.dark_green,
+        .shape = PlaneShape.init(.{ .size = .{ 50, 50 } }),
+        .material = try Util.createMaterialFromColor(.dark_green),
         .motion_type = .static,
     });
 
     // rl.drawMeshInstanced(mesh: Mesh, material: Material, transforms: []const Matrix)
-    for (0..70) |i| {
+    for (0..100) |i| {
         const x = @as(f32, @floatFromInt(i));
-        _ = try game_world.create_and_add(.{
+        _ = try game_world.createBody(.{
             .position = .{
-                @as(f32, @floatFromInt(random.intRangeLessThan(i32, 0, 40) - 20)),
+                Util.randomFloat(random, -20, 20),
                 3 + x,
-                @as(f32, @floatFromInt(random.intRangeLessThan(i32, 0, 40) - 20)),
+                Util.randomFloat(random, -20, 20),
                 0,
             },
-            .shape = SphereShape.init(.{ .radius = 0.2, .sub = .{ 5, 8 } }),
-            // .tint = rl.Color.init(
-            //     random.uintLessThan(u8, 255),
-            //     random.uintLessThan(u8, 255),
-            //     random.uintLessThan(u8, 255),
-            //     255,
-            // ),
+            .shape = SphereShape.init(.{
+                .radius = Util.randomFloat(random, 0.2, 0.5),
+                .sub = .{ 5, 8 },
+            }),
             .motion_type = .dynamic,
-            .material = blk: {
-                var material = try rl.loadMaterialDefault();
-                material.maps[@as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE))].color =
-                    rl.Color.init(
-                        random.uintLessThan(u8, 255),
-                        random.uintLessThan(u8, 255),
-                        random.uintLessThan(u8, 255),
-                        255,
-                    );
-                break :blk material;
-            },
+            .material = try Util.createMaterialFromColor(Util.randomColor(random)),
+            // .wires = rl.Color.white,
         });
     }
 
@@ -105,20 +94,29 @@ pub fn main() !void {
     jolt_wrapper.physics_system.optimizeBroadPhase();
 
     while (!rl.windowShouldClose()) {
-        jolt_wrapper.update(); // update physic by 1/60
-        player.update();
+        {
+            // UPDATE
+            const dt = rl.getFrameTime();
+            jolt_wrapper.update(dt); // update physic by 1/60
+            player.update();
+        }
+        {
+            // DRAW
+            rl.beginDrawing();
+            defer rl.endDrawing();
 
-        rl.updateCamera(&camera, .third_person);
+            rl.clearBackground(.dark_blue);
 
-        rl.beginDrawing();
-        defer rl.endDrawing();
+            {
+                rl.beginMode3D(camera);
+                defer rl.endMode3D();
 
-        rl.clearBackground(.dark_blue);
+                game_world.draw();
+                player.draw();
+            }
 
-        rl.beginMode3D(camera);
-        defer rl.endMode3D();
-
-        game_world.draw();
-        player.draw();
+            rl.drawFPS(10, 35);
+            rl.drawText("Zig Game (WASD + E)", 10, 10, 20, rl.Color.light_gray);
+        }
     }
 }

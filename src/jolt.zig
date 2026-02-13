@@ -204,7 +204,7 @@ pub const JoltWrapper = struct {
         allocator.destroy(self);
     }
 
-    pub fn update(self: *JoltWrapper) void {
-        self.physics_system.update(1.0 / 60.0, .{}) catch unreachable;
+    pub fn update(self: *JoltWrapper, dt: f32) void {
+        self.physics_system.update(dt, .{}) catch unreachable;
     }
 };
