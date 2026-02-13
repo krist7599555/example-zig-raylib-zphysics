@@ -2,7 +2,9 @@ const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
 const zm = @import("zmath");
+const znoise = @import("znoise");
 const zphy_helper = @import("./zphy_helper.zig");
+const JoltWrapper = @import("./jolt.zig").JoltWrapper;
 const splat = @import("./vec.zig").splat;
 const vec3 = @import("./vec.zig").vec3;
 const vec4 = @import("./vec.zig").vec4;
@@ -12,6 +14,25 @@ const Vec4 = @Vector(4, f32);
 
 const EPSILON = 0.001;
 const EARTH_GRAVITY = 9.8; // additional gravity more from physics_system.setGravity
+
+const Geometry = struct {};
+const BoxGeometry = struct { size: Vec3 };
+const SpereGeometry = struct { radius: Vec3 };
+
+const Material = struct {};
+const ColorMaterial = struct { color: Vec4 };
+
+const Transformation = struct {
+    scale: Vec3,
+    transition: Vec3,
+    rotation: Vec4,
+};
+
+const Mesh2 = struct {
+    shape: Geometry,
+    material: Material,
+    transform: Transformation,
+};
 
 const PhyRef = struct {
     body_id: zphy.BodyId,
@@ -68,7 +89,7 @@ const Player = struct {
             .rotation = .{ 0, 0, 0, 1 },
             .shape = shape,
             .motion_type = .dynamic,
-            .object_layer = zphy_helper.object_layers.moving,
+            .object_layer = JoltWrapper.ObjectLayer.moving,
             .allowed_DOFs = @enumFromInt(0 |
                 @intFromEnum(zphy.AllowedDOFs.translation_x) |
                 @intFromEnum(zphy.AllowedDOFs.translation_y) |
@@ -189,6 +210,95 @@ const Ground = struct {
     fn update(_: *Ground, _: f32) void {}
 };
 
+const NoiseGround = struct {
+    ref: PhyRef,
+    mesh: rl.Mesh,
+    model: rl.Model,
+    heights: []f32,
+    size: i32,
+
+    fn init(center: Vec3, hf_size: i32, physics_system: *zphy.PhysicsSystem, allocator: std.mem.Allocator) !NoiseGround {
+        const gen = znoise.FnlGenerator{
+            .seed = 1337,
+            .noise_type = .perlin,
+        };
+
+        // Heightfield dimensions (must be power of 2 for Jolt)
+        const samples_count: usize = @intCast(hf_size * hf_size);
+        const heights = try allocator.alloc(f32, samples_count);
+        const scale: f32 = 2.0;
+        const height_mult: f32 = 5.0;
+
+        for (0..@intCast(hf_size)) |z| {
+            for (0..@intCast(hf_size)) |x| {
+                const nx = @as(f32, @floatFromInt(x)) * scale;
+                const nz = @as(f32, @floatFromInt(z)) * scale;
+                heights[z * @as(usize, @intCast(hf_size)) + x] = gen.noise2(nx, nz) * height_mult;
+            }
+        }
+
+        // Physics Shape
+        const hf_settings = try zphy.HeightFieldShapeSettings.create(heights.ptr, @intCast(hf_size));
+        defer hf_settings.asShapeSettings().release();
+
+        // Center the heightfield
+        hf_settings.setOffset(.{ @as(f32, @floatFromInt(hf_size)) * -0.5, 0, @as(f32, @floatFromInt(hf_size)) * -0.5 });
+
+        const shape = try hf_settings.asShapeSettings().createShape();
+        defer shape.release();
+
+        const body_interface = physics_system.getBodyInterfaceMut();
+        const body_id = try body_interface.createAndAddBody(.{
+            .position = .{ center[0], center[1], center[2], 1 },
+            .shape = shape,
+            .motion_type = .static,
+            .object_layer = JoltWrapper.ObjectLayer.non_moving,
+        }, .activate);
+
+        // Visual Mesh (Raylib)
+        const image = rl.genImageColor(hf_size, hf_size, rl.Color.black);
+        defer rl.unloadImage(image);
+
+        // We can use genMeshHeightmap or build it manually. Let's use Raylib's helper.
+        // Convert heights -1 to 1 to 0..255 for the image
+        var img_data: [*]rl.Color = @ptrCast(image.data);
+        for (0..samples_count) |i| {
+            const h = (std.math.clamp(heights[i], -height_mult, height_mult) + height_mult) / (height_mult * 2.0);
+            const val = @as(u8, @intFromFloat(h * 255.0));
+            img_data[i] = rl.Color{ .r = val, .g = val, .b = val, .a = 255 };
+        }
+
+        const mesh = rl.genMeshHeightmap(image, rl.Vector3.init(@floatFromInt(hf_size), height_mult * 2.0, @floatFromInt(hf_size)));
+        const model = try rl.loadModelFromMesh(mesh);
+
+        return .{
+            .ref = .{ .body_id = body_id, .interface = body_interface },
+            .mesh = mesh,
+            .model = model,
+            .heights = heights,
+            .size = hf_size,
+        };
+    }
+
+    fn draw(self: NoiseGround) void {
+        rl.gl.rlPushMatrix();
+        defer rl.gl.rlPopMatrix();
+
+        const diff = @as(f32, @floatFromInt(self.size)) / 2;
+        rl.gl.rlTranslatef(-diff, 0, -diff);
+        rl.gl.rlMultMatrixf(@ptrCast(&self.ref.transformMat()));
+        rl.drawModel(self.model, rl.Vector3.zero(), 1.0, rl.Color.dark_gray);
+        rl.drawModelWires(self.model, rl.Vector3.zero(), 1.0, rl.Color.gray);
+    }
+
+    fn update(_: *NoiseGround, _: f32) void {}
+
+    fn deinit(self: *NoiseGround, allocator: std.mem.Allocator) void {
+        allocator.free(self.heights);
+        rl.unloadModel(self.model);
+    }
+};
+
 const Box = struct {
     ref: PhyRef,
     size: rl.Vector3,
@@ -203,7 +313,7 @@ const Box = struct {
             .position = .{ pos.x, pos.y, pos.z, 1 },
             .shape = shape,
             .motion_type = .dynamic,
-            .object_layer = zphy_helper.object_layers.moving,
+            .object_layer = JoltWrapper.ObjectLayer.moving,
         }, .activate) catch unreachable;
 
         return .{
@@ -265,17 +375,10 @@ pub fn main() anyerror!void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try zphy.init(allocator, .{});
-    defer zphy.deinit();
+    const jolt_wrapper = try JoltWrapper.init(allocator);
+    defer jolt_wrapper.destroy(allocator);
 
-    // const layer_interface = MyBroadphaseLayerInterface.init();
-    // const object_vs_broad_phase_filter = MyObjectVsBroadPhaseLayerFilter{};
-    // const object_layer_pair_filter = MyObjectLayerPairFilter{};
-
-    var physics_ctx = try zphy_helper.createPhysicsSystem(allocator);
-    defer physics_ctx.destroy();
-
-    const physics_system = physics_ctx.physics_system;
+    const physics_system = jolt_wrapper.physics_system;
     physics_system.setGravity(.{ 0, -EARTH_GRAVITY, 0 });
 
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
@@ -293,7 +396,8 @@ pub fn main() anyerror!void {
     defer rl.unloadShader(normal_shader);
 
     var player = Player.init(normal_shader, physics_system);
-    var ground = Ground.init(rl.Vector3.init(0, 0, 0), rl.Vector2.init(20, 20), physics_system);
+    var ground = try NoiseGround.init(vec3(.{ 0, 0, 0 }), 20, physics_system, allocator);
+    defer ground.deinit(allocator);
 
     var boxes: [100]Box = undefined;
     for (&boxes) |*box| {
@@ -333,8 +437,9 @@ pub fn main() anyerror!void {
                 mesh.update(dt);
             }
 
+            const player_pos = player.ref.position();
             camera.position = player.ref.camera_position();
-            camera.target = rl.Vector3.initVec(player.ref.position());
+            camera.target = rl.Vector3.init(player_pos[0], player_pos[1], player_pos[2]);
         }
 
         {
@@ -347,9 +452,11 @@ pub fn main() anyerror!void {
                 // DRAW 3D
                 camera.begin(); // beginMode3D
                 defer camera.end();
-                for (mesh_list) |mesh| {
-                    mesh.draw();
-                }
+                rl.drawCubeV(rl.Vector3.zero(), rl.Vector3.init(1, 1, 1), .red);
+                rl.drawPlane(rl.Vector3.zero(), rl.Vector2.init(3, 3), .black);
+                // for (mesh_list) |mesh| {
+                //     mesh.draw();
+                // }
             }
             {
                 // fade window when player fall far

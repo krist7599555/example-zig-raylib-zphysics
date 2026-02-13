@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
         .enable_cross_platform_determinism = true,
     });
     const zmath = b.dependency("zmath", .{});
+    const znoise = b.dependency("znoise", .{});
 
     const exe = b.addExecutable(.{
         .name = "zig_car_gl",
@@ -25,12 +26,14 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "raygui", .module = raylib_dep.module("raygui") },
                 .{ .name = "zphysics", .module = zphysics.module("root") },
                 .{ .name = "zmath", .module = zmath.module("root") },
+                .{ .name = "znoise", .module = znoise.module("root") },
             },
         }),
     });
 
     exe.linkLibrary(zphysics.artifact("joltc"));
     exe.linkLibrary(raylib_dep.artifact("raylib"));
+    exe.linkLibrary(znoise.artifact("FastNoiseLite"));
 
     b.installArtifact(exe);
 

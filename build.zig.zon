@@ -44,6 +44,10 @@
             .url = "git+https://github.com/krist7599555/zphysics?ref=patch-1#00cbabbdae329e368a1c430d8bd02d1a258d3138",
             .hash = "zphysics-0.2.0-dev-nZDEANvfQgD04nOPqL9KMokfgjzs_wPtHpoLscZScaOa",
         },
+        .znoise = .{
+            .url = "git+https://github.com/zig-gamedev/znoise#01c8b354cc3ef7f2293de75e58d3298a77d7ed06",
+            .hash = "znoise-0.3.0-dev-gK1op9ikAQDrS4G22GluyaQaabjGzhdnhV2QyCoLE8z7",
+        },
     },
     .paths = .{
         "build.zig",
