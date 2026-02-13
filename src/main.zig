@@ -21,6 +21,9 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+    const seed: u64 = 12345;
+    var pcg = std.Random.Pcg.init(seed);
+    const random = pcg.random();
 
     var jolt_wrapper = try Jolt.JoltWrapper.init(allocator);
     defer jolt_wrapper.destroy(allocator);
@@ -60,23 +63,50 @@ pub fn main() !void {
         .motion_type = .static,
     });
 
-    for (0..20) |i| {
+    // rl.drawMeshInstanced(mesh: Mesh, material: Material, transforms: []const Matrix)
+    for (0..70) |i| {
         const x = @as(f32, @floatFromInt(i));
         _ = try game_world.create_and_add(.{
-            .position = .{ x, 3 + x, x, 0 },
-            .shape = SphereShape.init(.{ .radius = 0.2 }),
-            .tine = rl.Color.blue,
+            .position = .{
+                @as(f32, @floatFromInt(random.intRangeLessThan(i32, 0, 40) - 20)),
+                3 + x,
+                @as(f32, @floatFromInt(random.intRangeLessThan(i32, 0, 40) - 20)),
+                0,
+            },
+            .shape = SphereShape.init(.{ .radius = 0.2, .sub = .{ 5, 8 } }),
+            // .tint = rl.Color.init(
+            //     random.uintLessThan(u8, 255),
+            //     random.uintLessThan(u8, 255),
+            //     random.uintLessThan(u8, 255),
+            //     255,
+            // ),
             .motion_type = .dynamic,
+            .material = blk: {
+                var material = try rl.loadMaterialDefault();
+                material.maps[@as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE))].color =
+                    rl.Color.init(
+                        random.uintLessThan(u8, 255),
+                        random.uintLessThan(u8, 255),
+                        random.uintLessThan(u8, 255),
+                        255,
+                    );
+                break :blk material;
+            },
         });
     }
 
-    var player = try Player.init(jolt_wrapper, &camera);
+    // player need override physic system when create,
+    // override camera by listen user input
+    var player = try Player.init(
+        jolt_wrapper.physics_system,
+        &camera,
+    );
 
     jolt_wrapper.physics_system.optimizeBroadPhase();
 
     while (!rl.windowShouldClose()) {
-        jolt_wrapper.update();
-        player.process();
+        jolt_wrapper.update(); // update physic by 1/60
+        player.update();
 
         rl.updateCamera(&camera, .third_person);
 
@@ -89,6 +119,6 @@ pub fn main() !void {
         defer rl.endMode3D();
 
         game_world.draw();
-        player.drawWires(jolt_wrapper);
+        player.draw();
     }
 }

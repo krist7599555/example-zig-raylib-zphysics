@@ -12,7 +12,7 @@ const Vec2 = @Vector(2, f32);
 const Vec3 = @Vector(3, f32);
 const Vec4 = @Vector(4, f32);
 
-const upVector = rl.Vector3{ .x = 0, .y = 1, .z = 0 };
+const UP_VECTOR = rl.Vector3{ .x = 0, .y = 1, .z = 0 };
 
 pub const Player = struct {
     height: f32,
@@ -22,7 +22,7 @@ pub const Player = struct {
     headCamera: *rl.Camera3D,
     firstPerson: bool = false,
 
-    pub fn init(joltWrapper: *Jolt.JoltWrapper, inCamera: *rl.Camera3D) anyerror!Player {
+    pub fn init(physics_system: *zphy.PhysicsSystem, camera: *rl.Camera3D) anyerror!Player {
         const height = 1.8;
         const radius = 0.25;
         const halfHeight = (height / 2.0) - radius;
@@ -49,100 +49,97 @@ pub const Player = struct {
             .{ 0, 1, 0 },
             .{ 0, 0, 0, 1 },
             0,
-            joltWrapper.physics_system,
+            physics_system,
         );
+
         character.addToPhysicsSystem(.{});
 
         return Player{
             .character = character,
-            .headCamera = inCamera,
+            .headCamera = camera,
             .height = height,
             .radius = radius,
             .halfHeight = halfHeight,
         };
     }
 
-    pub fn process(self: *Player) void {
+    pub fn update(self: *Player) void {
         if (rl.isKeyPressed(.e)) {
             self.firstPerson = !self.firstPerson;
         }
-        self.moveHead();
-        self.walk();
+        self.rotateHeadFromMouseInput();
+        self.walkOnXZaxisFromKeyInput();
     }
 
-    pub fn walk(self: *Player) void {
-        const linVel = vec3jtr(self.character.getLinearVelocity());
-        var linVelHorizontal = linVel;
-        linVelHorizontal.y = 0;
-        var forward = self.headCamera.target.subtract(self.headCamera.position);
-        forward.y = 0;
-        forward = forward.normalize();
-        // const forward = rl.Vector3Project(self.headCamera.target.sub(self.headCamera.position), upVector).normalize();
-        const perp = forward.crossProduct(upVector).normalize();
+    pub fn getForwardVectorXZ(camera: *const rl.Camera) rl.Vector3 {
+        const out = camera.target.subtract(camera.position);
+        return rl.Vector3.init(out.x, 0, out.z).normalize();
+    }
 
-        var desiredHorizontal = rl.Vector3.zero();
-        if (rl.isKeyDown(.w)) {
-            desiredHorizontal = desiredHorizontal.add(forward);
-        }
-        if (rl.isKeyDown(.s)) {
-            desiredHorizontal = desiredHorizontal.subtract(forward);
-        }
-        if (rl.isKeyDown(.d)) {
-            desiredHorizontal = desiredHorizontal.add(perp);
-        }
-        if (rl.isKeyDown(.a)) {
-            desiredHorizontal = desiredHorizontal.subtract(perp);
-        }
-        desiredHorizontal = desiredHorizontal.normalize().scale(5);
+    pub fn walkOnXZaxisFromKeyInput(self: *Player) void {
+        const curr_v: rl.Vector3 = vec3jtr(self.character.getLinearVelocity());
 
-        if (linVelHorizontal.length() < desiredHorizontal.length()) {
-            self.character.setLinearVelocity(.{ desiredHorizontal.x, linVel.y, desiredHorizontal.z });
+        const dir_w_s: rl.Vector3 = getForwardVectorXZ(self.headCamera);
+        const dir_d_a: rl.Vector3 = dir_w_s.crossProduct(UP_VECTOR).normalize();
+
+        const new_v_xz = blk: {
+            var res = rl.Vector3.zero();
+            if (rl.isKeyDown(.w)) res = res.add(dir_w_s);
+            if (rl.isKeyDown(.s)) res = res.subtract(dir_w_s);
+            if (rl.isKeyDown(.d)) res = res.add(dir_d_a);
+            if (rl.isKeyDown(.a)) res = res.subtract(dir_d_a);
+            break :blk res.normalize().scale(5);
+        };
+
+        var curr_v_xz = rl.Vector3.init(curr_v.x, 0, curr_v.z);
+        if (curr_v_xz.length() < new_v_xz.length()) {
+            self.character.setLinearVelocity(.{ new_v_xz.x, curr_v.y, new_v_xz.z });
         }
     }
 
-    pub fn moveHead(self: *Player) void {
-        const mouseDelta = rl.getMouseDelta();
-        var arm = self.headCamera.target.subtract(self.headCamera.position);
-        arm = arm.rotateByAxisAngle(rl.Vector3.init(0, 1, 0), -mouseDelta.x / 100);
+    pub fn rotateHeadFromMouseInput(self: *Player) void {
+        const d = rl.getMouseDelta();
 
-        const perp = arm.crossProduct(upVector).normalize();
-        arm = arm.rotateByAxisAngle(perp, -mouseDelta.y / 100);
+        const curr_arm = self.headCamera.target.subtract(self.headCamera.position); // x_vector
+        const z_vector = curr_arm.crossProduct(UP_VECTOR).normalize();
+        const new_arm = curr_arm
+            .rotateByAxisAngle(UP_VECTOR, -d.x / 100) // rotate(y) = left-right
+            .rotateByAxisAngle(z_vector, -d.y / 100); // rotate(z) = up-down
 
         const position = self.character.getPosition();
-        self.headCamera.target = vec3jtr(position);
-        self.headCamera.position = self.headCamera.target.subtract(arm);
 
         if (self.firstPerson) {
-            var target = self.headCamera.target;
-            target.y += 0.8;
-            self.headCamera.position = target;
-            self.headCamera.target = target.add(arm);
+            var target = vec3jtr(position);
+            target.y += 0.8; // eye should be on head, not center of body
             self.headCamera.fovy = 80;
+            self.headCamera.position = target;
+            self.headCamera.target = target.add(new_arm);
         } else {
             self.headCamera.fovy = 55;
+            self.headCamera.target = vec3jtr(position);
+            self.headCamera.position = vec3jtr(position).subtract(new_arm);
         }
     }
 
-    pub fn drawWires(self: *Player, joltWrapper: *Jolt.JoltWrapper) void {
-        _ = joltWrapper;
+    pub fn draw(self: *Player) void {
+        if (self.firstPerson) return; // if first person - not draw
         const position = self.character.getPosition();
-        if (!self.firstPerson) {
-            rl.drawCapsuleWires(
-                rl.Vector3{
-                    .x = position[0],
-                    .y = position[1] - self.halfHeight + self.radius,
-                    .z = position[2],
-                },
-                rl.Vector3{
-                    .x = position[0],
-                    .y = position[1] + self.halfHeight - self.radius,
-                    .z = position[2],
-                },
-                self.radius * 2,
-                8,
-                4,
-                rl.Color.white,
-            );
-        }
+
+        rl.drawCapsuleWires(
+            rl.Vector3{
+                .x = position[0],
+                .y = position[1] - self.halfHeight + self.radius,
+                .z = position[2],
+            },
+            rl.Vector3{
+                .x = position[0],
+                .y = position[1] + self.halfHeight - self.radius,
+                .z = position[2],
+            },
+            self.radius * 2,
+            8,
+            4,
+            rl.Color.white,
+        );
     }
 };
