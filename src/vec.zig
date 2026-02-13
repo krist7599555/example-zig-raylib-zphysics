@@ -71,6 +71,14 @@ pub fn vec4jtr(obj: anytype) rl.Vector4 {
         const w = if (len > 3) obj[3] else 0.0;
         return rl.Vector4.init(x, y, z, w);
     }
+    if (info == .array and info.array.child == f32) {
+        const len = info.array.len;
+        const x = if (len > 0) obj[0] else 0.0;
+        const y = if (len > 1) obj[1] else 0.0;
+        const z = if (len > 2) obj[2] else 0.0;
+        const w = if (len > 3) obj[3] else 0.0;
+        return rl.Vector4.init(x, y, z, w);
+    }
     @compileError("Unsupported type for vec4: " ++ @typeName(T));
 }
 

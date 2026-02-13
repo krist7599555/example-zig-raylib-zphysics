@@ -27,31 +27,43 @@ pub const Player = struct {
         const radius = 0.25;
         const halfHeight = (height / 2.0) - radius;
         const capsuleSettings = try zphy.CapsuleShapeSettings.create(radius, halfHeight);
-        defer capsuleSettings.release();
-        const capsuleShape = try capsuleSettings.createShape();
-        defer capsuleShape.release();
-
-        const characterSettings = try zphy.CharacterSettings.create();
+        const capsuleShape = try capsuleSettings.asShapeSettings().createShape();
+        // _ = capsuleShape;
+        var characterSettings = try zphy.CharacterSettings.create();
         defer characterSettings.release();
-        characterSettings.base = .{
-            .up = .{ 0, 1, 0, 0 },
-            .supporting_volume = .{ 0, -1, 0, 0 },
-            .max_slope_angle = 0.78,
-            .shape = capsuleShape,
-        };
+
+        // 1. ตั้งค่าพื้นฐาน (Basic properties)
         characterSettings.layer = Jolt.object_layers.moving;
         characterSettings.mass = 10.0;
-        characterSettings.friction = 20.0;
+        characterSettings.friction = 0.5; // ปกติค่า friction จะอยู่ระหว่าง 0-1 (20.0 อาจจะหนืดเกินไป)
         characterSettings.gravity_factor = 1.0;
 
-        const character = try zphy.Character.create(characterSettings, .{ 0, 1, 0 }, .{ 0, 0, 0, 1 }, 0, joltWrapper.physics_system);
+        // 2. ตั้งค่าการเคลื่อนที่และรูปร่าง (มักจะอยู่ในฟิลด์หลักหรือฟิลด์ที่สืบทอดมา)
+        characterSettings.base.up = .{ 0, 1, 0, 0 };
+        characterSettings.base.supporting_volume = .{ 0, -1, 0, 0.5 }; // Plane normal + constant
+        characterSettings.base.max_slope_angle = 0.78; // ประมาณ 45 องศา (ในหน่วย Radians)
+        characterSettings.base.shape = capsuleShape;
+
+        const character = try zphy.Character.create(
+            characterSettings,
+            .{ 0, 1, 0 },
+            .{ 0, 0, 0, 1 },
+            0,
+            joltWrapper.physics_system,
+        );
         character.addToPhysicsSystem(.{});
 
-        return Player{ .character = character, .headCamera = inCamera, .height = height, .radius = radius, .halfHeight = halfHeight };
+        return Player{
+            .character = character,
+            .headCamera = inCamera,
+            .height = height,
+            .radius = radius,
+            .halfHeight = halfHeight,
+        };
     }
 
     pub fn process(self: *Player) void {
-        if (rl.IsKeyPressed(rl.KeyboardKey.KEY_W)) {
+        if (rl.isKeyPressed(.e)) {
             self.firstPerson = !self.firstPerson;
         }
         self.moveHead();
@@ -62,24 +74,24 @@ pub const Player = struct {
         const linVel = vec3jtr(self.character.getLinearVelocity());
         var linVelHorizontal = linVel;
         linVelHorizontal.y = 0;
-        var forward = self.headCamera.target.sub(self.headCamera.position);
+        var forward = self.headCamera.target.subtract(self.headCamera.position);
         forward.y = 0;
         forward = forward.normalize();
         // const forward = rl.Vector3Project(self.headCamera.target.sub(self.headCamera.position), upVector).normalize();
-        const perp = rl.Vector3CrossProduct(forward, upVector).normalize();
+        const perp = forward.crossProduct(upVector).normalize();
 
-        var desiredHorizontal = rl.Vector3Zero();
-        if (rl.IsKeyDown(rl.KeyboardKey.KEY_E)) {
+        var desiredHorizontal = rl.Vector3.zero();
+        if (rl.isKeyDown(.w)) {
             desiredHorizontal = desiredHorizontal.add(forward);
         }
-        if (rl.IsKeyDown(rl.KeyboardKey.KEY_D)) {
-            desiredHorizontal = desiredHorizontal.sub(forward);
+        if (rl.isKeyDown(.s)) {
+            desiredHorizontal = desiredHorizontal.subtract(forward);
         }
-        if (rl.IsKeyDown(rl.KeyboardKey.KEY_F)) {
+        if (rl.isKeyDown(.d)) {
             desiredHorizontal = desiredHorizontal.add(perp);
         }
-        if (rl.IsKeyDown(rl.KeyboardKey.KEY_S)) {
-            desiredHorizontal = desiredHorizontal.sub(perp);
+        if (rl.isKeyDown(.a)) {
+            desiredHorizontal = desiredHorizontal.subtract(perp);
         }
         desiredHorizontal = desiredHorizontal.normalize().scale(5);
 
@@ -89,16 +101,16 @@ pub const Player = struct {
     }
 
     pub fn moveHead(self: *Player) void {
-        const mouseDelta = rl.GetMouseDelta();
-        var arm = self.headCamera.target.sub(self.headCamera.position);
-        arm = rl.Vector3RotateByAxisAngle(arm, .{ .y = 1 }, -mouseDelta.x / 100);
+        const mouseDelta = rl.getMouseDelta();
+        var arm = self.headCamera.target.subtract(self.headCamera.position);
+        arm = arm.rotateByAxisAngle(rl.Vector3.init(0, 1, 0), -mouseDelta.x / 100);
 
-        const perp = rl.Vector3CrossProduct(arm, upVector).normalize();
-        arm = rl.Vector3RotateByAxisAngle(arm, perp, -mouseDelta.y / 100);
+        const perp = arm.crossProduct(upVector).normalize();
+        arm = arm.rotateByAxisAngle(perp, -mouseDelta.y / 100);
 
         const position = self.character.getPosition();
         self.headCamera.target = vec3jtr(position);
-        self.headCamera.position = self.headCamera.target.sub(arm);
+        self.headCamera.position = self.headCamera.target.subtract(arm);
 
         if (self.firstPerson) {
             var target = self.headCamera.target;
@@ -115,15 +127,22 @@ pub const Player = struct {
         _ = joltWrapper;
         const position = self.character.getPosition();
         if (!self.firstPerson) {
-            rl.DrawCapsuleWires(rl.Vector3{
-                .x = position[0],
-                .y = position[1] - self.halfHeight + self.radius,
-                .z = position[2],
-            }, rl.Vector3{
-                .x = position[0],
-                .y = position[1] + self.halfHeight - self.radius,
-                .z = position[2],
-            }, self.radius * 2, 8, 4, rl.Color.white);
+            rl.drawCapsuleWires(
+                rl.Vector3{
+                    .x = position[0],
+                    .y = position[1] - self.halfHeight + self.radius,
+                    .z = position[2],
+                },
+                rl.Vector3{
+                    .x = position[0],
+                    .y = position[1] + self.halfHeight - self.radius,
+                    .z = position[2],
+                },
+                self.radius * 2,
+                8,
+                4,
+                rl.Color.white,
+            );
         }
     }
 };

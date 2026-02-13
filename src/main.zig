@@ -22,7 +22,7 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const jolt_wrapper = try Jolt.JoltWrapper.init(allocator);
+    var jolt_wrapper = try Jolt.JoltWrapper.init(allocator);
     defer jolt_wrapper.destroy(allocator);
 
     jolt_wrapper.physics_system.setGravity(.{ 0, -Config.gravity, 0 });
@@ -70,11 +70,15 @@ pub fn main() !void {
         });
     }
 
+    var player = try Player.init(jolt_wrapper, &camera);
+
     jolt_wrapper.physics_system.optimizeBroadPhase();
 
     while (!rl.windowShouldClose()) {
         jolt_wrapper.update();
-        rl.updateCamera(&camera, .orbital);
+        player.process();
+
+        rl.updateCamera(&camera, .third_person);
 
         rl.beginDrawing();
         defer rl.endDrawing();
@@ -85,5 +89,6 @@ pub fn main() !void {
         defer rl.endMode3D();
 
         game_world.draw();
+        player.drawWires(jolt_wrapper);
     }
 }
