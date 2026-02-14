@@ -1,6 +1,11 @@
 # Zig + Raylib + ZPhysics Example
 
-<img width="912" height="594" alt="Screenshot 2569-02-12 at 05 32 11" src="https://github.com/user-attachments/assets/1eddcafa-cc04-4dc8-aff8-68d48d93becb" />
+<img width="912" height="944" alt="V2 Screenshot 2569-02-15" src="https://github.com/user-attachments/assets/7143fd82-c18c-4126-9830-a0c42e8fd6d0" />
+
+<img width="912" height="594" alt="V1 Screenshot 2569-02-12" src="https://github.com/user-attachments/assets/1eddcafa-cc04-4dc8-aff8-68d48d93becb" />
+
+- [branch v2 - shadowmap + charactor physic](https://github.com/krist7599555/example-zig-raylib-zphysics/tree/v2)
+- [branch v1 - manual control](https://github.com/krist7599555/example-zig-raylib-zphysics/tree/v1)
 
 A high-performance 3D physics demonstration built with **Zig**, **Raylib**, and **ZPhysics** (Jolt Physics).
 
