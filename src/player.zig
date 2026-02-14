@@ -11,24 +11,37 @@ const vec3jtr = @import("./vec.zig").vec3jtr;
 const Vec2 = @Vector(2, f32);
 const Vec3 = @Vector(3, f32);
 const Vec4 = @Vector(4, f32);
+const GameWorld = @import("./game_world.zig").GameWorld;
 
+const AppShape = @import("./shape.zig");
 const UP_VECTOR = rl.Vector3{ .x = 0, .y = 1, .z = 0 };
 
+pub const PlayerSetting = struct {
+    game: *GameWorld,
+    height: f32 = 1.8,
+    radius: f32 = 0.5,
+    camera: rl.Camera3D,
+    shader: ?rl.Shader,
+};
+
 pub const Player = struct {
-    height: f32,
-    radius: f32,
-    halfHeight: f32,
     character: *zphy.Character,
-    headCamera: *rl.Camera3D,
+    headCamera: rl.Camera3D,
     firstPerson: bool = false,
 
-    pub fn init(physics_system: *zphy.PhysicsSystem, camera: *rl.Camera3D) anyerror!Player {
-        const height = 1.8;
-        const radius = 0.25;
-        const halfHeight = (height / 2.0) - radius;
-        const capsuleSettings = try zphy.CapsuleShapeSettings.create(radius, halfHeight);
-        const capsuleShape = try capsuleSettings.asShapeSettings().createShape();
-        // _ = capsuleShape;
+    model: rl.Model,
+
+    height: f32,
+    radius: f32,
+
+    pub fn init(
+        arg: PlayerSetting,
+    ) anyerror!Player {
+        const shape = try AppShape.calc(AppShape.Cylinder{
+            .height = arg.height,
+            .radius = arg.radius,
+        });
+
         var characterSettings = try zphy.CharacterSettings.create();
         defer characterSettings.release();
 
@@ -42,25 +55,32 @@ pub const Player = struct {
         characterSettings.base.up = .{ 0, 1, 0, 0 };
         characterSettings.base.supporting_volume = .{ 0, -1, 0, 0.5 }; // Plane normal + constant
         characterSettings.base.max_slope_angle = 0.78; // ประมาณ 45 องศา (ในหน่วย Radians)
-        characterSettings.base.shape = capsuleShape;
+        characterSettings.base.shape = shape.shape;
 
         const character = try zphy.Character.create(
             characterSettings,
-            .{ 0, 1, 0 },
+            .{ 0, 10, 0 },
             .{ 0, 0, 0, 1 },
             0,
-            physics_system,
+            arg.game.physics_system,
         );
 
         character.addToPhysicsSystem(.{});
 
-        return Player{
+        const model = try rl.Model.fromMesh(shape.mesh);
+        if (arg.shader) |shader| {
+            model.materials[0].shader = shader;
+        }
+
+        const player = Player{
+            .height = arg.height,
+            .radius = arg.radius,
             .character = character,
-            .headCamera = camera,
-            .height = height,
-            .radius = radius,
-            .halfHeight = halfHeight,
+            .headCamera = arg.camera,
+            .model = model,
         };
+        arg.game.player = player;
+        return player;
     }
 
     pub fn update(self: *Player) void {
@@ -79,7 +99,7 @@ pub const Player = struct {
     pub fn walkOnXZaxisFromKeyInput(self: *Player) void {
         const curr_v: rl.Vector3 = vec3jtr(self.character.getLinearVelocity());
 
-        const dir_w_s: rl.Vector3 = getForwardVectorXZ(self.headCamera);
+        const dir_w_s: rl.Vector3 = getForwardVectorXZ(&self.headCamera);
         const dir_d_a: rl.Vector3 = dir_w_s.crossProduct(UP_VECTOR).normalize();
 
         const new_v_xz = blk: {
@@ -121,25 +141,9 @@ pub const Player = struct {
         }
     }
 
-    pub fn draw(self: *Player) void {
+    pub fn draw(self: *const Player) void {
         if (self.firstPerson) return; // if first person - not draw
         const position = self.character.getPosition();
-
-        rl.drawCapsuleWires(
-            rl.Vector3{
-                .x = position[0],
-                .y = position[1] - self.halfHeight + self.radius,
-                .z = position[2],
-            },
-            rl.Vector3{
-                .x = position[0],
-                .y = position[1] + self.halfHeight - self.radius,
-                .z = position[2],
-            },
-            self.radius * 2,
-            8,
-            4,
-            rl.Color.white,
-        );
+        self.model.draw(rl.Vector3.init(position[0], position[1] - self.height * 0.5, position[2]), 1.0, .white);
     }
 };

@@ -8,6 +8,13 @@ pub fn createMaterialFromColor(color: rl.Color) !rl.Material {
     return material;
 }
 
+pub fn createMaterial(shader: rl.Shader, color: rl.Color) !rl.Material {
+    var material = try rl.loadMaterialDefault();
+    material.maps[@as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE))].color = color;
+    material.shader = shader;
+    return material;
+}
+
 pub fn randomColor(random: std.Random) rl.Color {
     return rl.Color.init(
         random.uintLessThan(u8, 255),
