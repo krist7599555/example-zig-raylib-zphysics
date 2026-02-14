@@ -50,7 +50,9 @@ pub fn main() !void {
     };
 
     const ShadowMapper = @import("./shadow_maper.zig").ShadowMapper;
-    var shadow_mapper = try ShadowMapper.init();
+    var shadow_mapper = try ShadowMapper.init(.{
+        .resolution = 1024,
+    });
     defer shadow_mapper.deinit();
 
     const body_interface = jolt_wrapper.physics_system.getBodyInterfaceMut();

@@ -49,6 +49,7 @@ void main()
     finalColor = (texelColor*((colDiffuse + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
 
     // Shadow calculations
+    // f(fragPosition) -> shadowMapCoor
     vec4 fragPosLightSpace = lightVP * vec4(fragPosition, 1);
     fragPosLightSpace.xyz /= fragPosLightSpace.w; // Perform the perspective division
     fragPosLightSpace.xyz = (fragPosLightSpace.xyz + 1.0f) / 2.0f; // Transform from [-1, 1] range to [0, 1] range
@@ -64,7 +65,7 @@ void main()
     // Instead of testing if just one point is closer to the current point,
     // we test the surrounding points as well.
     // This blurs shadow edges, hiding aliasing artifacts.
-    
+
     // 3. ใช้ PCF (Percentage Closer Filtering)
     // แทนที่จะเช็คแค่พิกเซลเดียวใน Shadow Map ให้เช็คพิกเซลรอบๆ แล้วนำมาเฉลี่ยกัน จะช่วยให้ขอบเงาดูนุ่มนวลขึ้น (Soft Shadows)
     // เพิ่มโค้ดนี้ใน Fragment Shader ของคุณ:
