@@ -6,6 +6,7 @@ const physic = @import("./physic.zig");
 const splat = @import("./vec.zig").splat;
 const vec3jtr = @import("./vec.zig").vec3jtr;
 const GameWorld = @import("./game_world.zig").GameWorld;
+const shapes = @import("./shape.zig");
 
 const AppShape = @import("./shape.zig");
 const UP_VECTOR = rl.Vector3{ .x = 0, .y = 1, .z = 0 };
@@ -31,11 +32,6 @@ pub const Player = struct {
     pub fn init(
         arg: PlayerSetting,
     ) anyerror!Player {
-        const shape = try AppShape.calc(AppShape.Cylinder{
-            .height = arg.height,
-            .radius = arg.radius,
-        });
-
         var characterSettings = try zphy.CharacterSettings.create();
         defer characterSettings.release();
 
@@ -49,7 +45,7 @@ pub const Player = struct {
         characterSettings.base.up = .{ 0, 1, 0, 0 };
         characterSettings.base.supporting_volume = .{ 0, -1, 0, 0.5 }; // Plane normal + constant
         characterSettings.base.max_slope_angle = 0.78; // ประมาณ 45 องศา (ในหน่วย Radians)
-        characterSettings.base.shape = shape.shape;
+        characterSettings.base.shape = try shapes.cylinder_shape(arg.radius, arg.height);
 
         const character = try zphy.Character.create(
             characterSettings,
@@ -61,7 +57,9 @@ pub const Player = struct {
 
         character.addToPhysicsSystem(.{});
 
-        const model = try rl.Model.fromMesh(shape.mesh);
+        const model = try rl.Model.fromMesh(
+            shapes.cylinder_mesh(arg.radius, arg.height, 12),
+        );
         if (arg.shader) |shader| {
             model.materials[0].shader = shader;
         }

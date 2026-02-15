@@ -8,8 +8,8 @@ const Util = @import("./util.zig");
 const AppShader = @import("./shader/index.zig");
 const AppShape = @import("./shape.zig");
 const physic = @import("./physic.zig");
-const ShadowMapper = @import("./shadow_maper.zig").ShadowMapper;
-
+const shadow = @import("./shadow.zig");
+const shapes = @import("./shape.zig");
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -33,27 +33,24 @@ pub fn main() !void {
     defer rl.closeWindow();
     rl.setTargetFPS(Config.fps);
 
-    var shadow_mapper = try ShadowMapper.init(.{
-        .resolution = Config.shadow_map.resolution,
+    var shadow_pass = try shadow.ShadowMapPass.init(.{
+        .texture_resolution = Config.shadow_map.texture_resolution,
         .light_dir = rl.Vector3.initVec(Config.shadow_map.light_direction).normalize(),
     });
-    defer shadow_mapper.deinit();
+    defer shadow_pass.deinit();
 
     {
         // CREATE GROUND PLANE
-        const shape = try AppShape.calc(AppShape.Plane{
-            .size = .{ 50, 50 },
-            .sub = .{ 50, 50 },
-        });
+        const plane_size = @Vector(2, f32){ 50, 50 };
         _ = try game_world.createBody(.{
             .graphic = .{
-                .mesh = shape.mesh,
-                .shader = shadow_mapper.shadowShader,
+                .mesh = shapes.plane_mesh(plane_size, .{ 50, 50 }),
+                .shader = shadow_pass.depth_shader,
                 .tint = .dark_green,
                 .wires = .white,
             },
             .physic = .{
-                .shape = shape.shape,
+                .shape = try shapes.plane_shape(plane_size),
                 .motion_type = .static,
             },
         });
@@ -61,58 +58,51 @@ pub fn main() !void {
 
     for (0..100) |i| {
         // CREATE 100 RANDOM BALL
-        const position: [4]f32 = .{
-            Util.randomFloat(random, -20, 20),
-            @as(f32, @floatFromInt(i)) * 4 + 4,
-            Util.randomFloat(random, -20, 20),
-            0,
-        };
-
-        const shape = try AppShape.calc(AppShape.Sphere{
-            .radius = Util.randomFloat(random, 0.2, 2.0),
-            .sub = .{ 10, 16 },
-        });
+        const radius = Util.randomFloat(random, 0.2, 2.0);
         _ = try game_world.createBody(.{
             .graphic = .{
-                .mesh = shape.mesh,
-                .shader = shadow_mapper.shadowShader,
+                .mesh = shapes.sphere_mesh(radius, 10, 16),
+                .shader = shadow_pass.depth_shader,
                 .tint = Util.randomColor(random),
             },
             .physic = .{
-                .position = position,
-                .shape = shape.shape,
+                .shape = try shapes.sphere_shape(radius),
                 .motion_type = .dynamic,
                 .restitution = 0.5, // Coefficient of restitution https://en.wikipedia.org/wiki/Coefficient_of_restitution
+                .position = .{
+                    Util.randomFloat(random, -20, 20),
+                    @as(f32, @floatFromInt(i)) * 4 + 4,
+                    Util.randomFloat(random, -20, 20),
+                    0,
+                },
             },
         });
     }
     for (0..100) |i| {
         // CREATE 100 RANDOM BOX
-        const position: [4]f32 = .{
-            Util.randomFloat(random, -20, 20),
-            @as(f32, @floatFromInt(i)) * 4 + 4,
-            Util.randomFloat(random, -20, 20),
-            0,
+
+        const size = @Vector(3, f32){
+            Util.randomFloat(random, 0.2, 2.5),
+            Util.randomFloat(random, 0.2, 2.5),
+            Util.randomFloat(random, 0.2, 2.5),
         };
 
-        const shape = try AppShape.calc(AppShape.Box{
-            .size = .{
-                Util.randomFloat(random, 0.2, 2.5),
-                Util.randomFloat(random, 0.2, 2.5),
-                Util.randomFloat(random, 0.2, 2.5),
-            },
-        });
         _ = try game_world.createBody(.{
             .graphic = .{
-                .mesh = shape.mesh,
-                .shader = shadow_mapper.shadowShader,
+                .mesh = shapes.box_mesh(size),
+                .shader = shadow_pass.depth_shader,
                 .tint = Util.randomColor(random),
             },
             .physic = .{
-                .position = position,
-                .shape = shape.shape,
+                .shape = try shapes.box_shape(size),
                 .motion_type = .dynamic,
                 .restitution = 0.5, // Coefficient of restitution https://en.wikipedia.org/wiki/Coefficient_of_restitution
+                .position = .{
+                    Util.randomFloat(random, -20, 20),
+                    @as(f32, @floatFromInt(i)) * 4 + 4,
+                    Util.randomFloat(random, -20, 20),
+                    0,
+                },
             },
         });
     }
@@ -122,7 +112,7 @@ pub fn main() !void {
         .height = 1.8,
         .radius = 0.5,
         .game = &game_world,
-        .shader = shadow_mapper.shadowShader,
+        .shader = shadow_pass.depth_shader,
         .camera = rl.Camera3D{
             .position = rl.Vector3.init(10, 10, 10),
             .target = rl.Vector3.init(0.0, 0.5, 0.0),
@@ -143,7 +133,9 @@ pub fn main() !void {
         }
         {
             // Compute shadowTexture
-            shadow_mapper.drawToShadowMapTexture(&game_world);
+            shadow_pass.begin();
+            defer shadow_pass.end();
+            game_world.draw();
         }
         {
             // DRAW
@@ -165,11 +157,11 @@ pub fn main() !void {
             {
                 rl.beginShaderMode(depthShader);
                 defer rl.endShaderMode();
-                rl.drawTextureEx(shadow_mapper.shadowMap.depth, .init(10, @floatFromInt(y)), 0.0, 0.3, .white);
+                rl.drawTextureEx(shadow_pass.depth_target.depth, .init(10, @floatFromInt(y)), 0.0, 0.3, .white);
                 rl.drawText("Shadow.Depth", 10 + 10, y + 10, 20, rl.Color.white);
                 y += 320;
             }
-            rl.drawTextureEx(shadow_mapper.shadowMap.texture, .init(10, @floatFromInt(y)), 0.0, 0.3, .white);
+            rl.drawTextureEx(shadow_pass.depth_target.texture, .init(10, @floatFromInt(y)), 0.0, 0.3, .white);
             rl.drawText("Shadow.Texture", 10 + 10, y + 10, 20, rl.Color.light_gray);
         }
     }

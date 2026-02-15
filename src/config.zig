@@ -9,7 +9,7 @@ pub const GameConfig = .{
         .fov = 45,
     },
     .shadow_map = .{
-        .resolution = 1024,
+        .texture_resolution = 1024,
         .light_direction = @Vector(3, f32){ 10.0, -40.0, 70.0 },
     },
 };

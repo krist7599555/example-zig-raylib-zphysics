@@ -28,12 +28,12 @@ fn Uniform(comptime T: type, comptime name: []const u8) type {
 const ShadowShaderUniform = struct {
     colDiffuse: Uniform(rl.Vector4, "colDiffuse") = .{},
     lightDir: Uniform(rl.Vector3, "lightDir") = .{},
-    lightColor: Uniform(rl.Vector4, "lightColor") = .{},
-    ambient: Uniform(rl.Vector4, "ambient") = .{},
+    light_color: Uniform(rl.Vector4, "light_color") = .{},
+    ambient_color: Uniform(rl.Vector4, "ambient_color") = .{},
     viewPos: Uniform(rl.Vector3, "viewPos") = .{}, // = camera position =
     lightVP: Uniform(rl.Matrix, "lightVP") = .{},
-    shadowMapResolution: Uniform(i32, "shadowMapResolution") = .{},
-    shadowMap: Uniform(i32, "shadowMap") = .{}, // sampler2D
+    depth_texture_size: Uniform(i32, "depth_texture_size") = .{},
+    depth_target: Uniform(i32, "depth_target") = .{}, // sampler2D
 };
 
 pub const ShadowShader = struct {
@@ -96,15 +96,15 @@ pub const ShadowShader = struct {
         \\
         \\// Input lighting values
         \\uniform vec3 lightDir;
-        \\uniform vec4 lightColor;
-        \\uniform vec4 ambient;
+        \\uniform vec4 light_color;
+        \\uniform vec4 ambient_color;
         \\uniform vec3 viewPos;
         \\
         \\// Input shadowmapping values
         \\uniform mat4 lightVP; // Light source view-projection matrix
-        \\uniform sampler2D shadowMap;
+        \\uniform sampler2D depth_target;
         \\
-        \\uniform int shadowMapResolution;
+        \\uniform int depth_texture_size;
         \\
         \\void main()
         \\{
@@ -118,7 +118,7 @@ pub const ShadowShader = struct {
         \\    vec3 l = -lightDir;
         \\
         \\    float NdotL = max(dot(normal, l), 0.0);
-        \\    lightDot += lightColor.rgb*NdotL;
+        \\    lightDot += light_color.rgb*NdotL;
         \\
         \\    float specCo = 0.0;
         \\    //if (NdotL > 0.0) specCo = pow(max(0.0, dot(viewD, reflect(-(l), normal))), 16.0); // 16 refers to shine
@@ -127,7 +127,7 @@ pub const ShadowShader = struct {
         \\    finalColor = (texelColor*((colDiffuse + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
         \\
         \\    // Shadow calculations
-        \\    // f(fragPosition) -> shadowMapCoor
+        \\    // f(fragPosition) -> depth_targetCoor
         \\    vec4 fragPosLightSpace = lightVP * vec4(fragPosition, 1);
         \\    fragPosLightSpace.xyz /= fragPosLightSpace.w; // Perform the perspective division
         \\    fragPosLightSpace.xyz = (fragPosLightSpace.xyz + 1.0f) / 2.0f; // Transform from [-1, 1] range to [0, 1] range
@@ -147,12 +147,12 @@ pub const ShadowShader = struct {
         \\    // 3. ใช้ PCF (Percentage Closer Filtering)
         \\    // แทนที่จะเช็คแค่พิกเซลเดียวใน Shadow Map ให้เช็คพิกเซลรอบๆ แล้วนำมาเฉลี่ยกัน จะช่วยให้ขอบเงาดูนุ่มนวลขึ้น (Soft Shadows)
         \\    // เพิ่มโค้ดนี้ใน Fragment Shader ของคุณ:
-        \\    vec2 texelSize = vec2(1.0f / float(shadowMapResolution));
+        \\    vec2 texelSize = vec2(1.0f / float(depth_texture_size));
         \\    for (int x = -1; x <= 1; x++)
         \\    {
         \\        for (int y = -1; y <= 1; y++)
         \\        {
-        \\            float sampleDepth = texture(shadowMap, sampleCoords + texelSize * vec2(x, y)).r;
+        \\            float sampleDepth = texture(depth_target, sampleCoords + texelSize * vec2(x, y)).r;
         \\            if (curDepth - bias > sampleDepth)
         \\            {
         \\                shadowCounter++;
@@ -166,7 +166,7 @@ pub const ShadowShader = struct {
         \\    if (shadowCounter > 0 && (ditherY || ditherX)) finalColor = vec4(0.0, 0.0, 0.0, 1.0);
         \\
         \\    //finalColor = mix(finalColor, vec4(0, 0, 0, 1), float(shadowCounter) / float(numSamples));
-        \\    //finalColor += texelColor*(ambient/10.0)*colDiffuse;
+        \\    //finalColor += texelColor*(ambient_color/10.0)*colDiffuse;
         \\    //finalColor = pow(finalColor, vec4(1.0/2.2));
         \\}
     ;
@@ -179,7 +179,7 @@ pub const ShadowShader = struct {
             @field(res.uniform, f.name).init(res.shader);
         }
         res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.vector_view))] = res.uniform.viewPos.loc;
-        res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_ambient))] = res.uniform.ambient.loc;
+        res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_ambient))] = res.uniform.ambient_color.loc;
         res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_diffuse))] = res.uniform.colDiffuse.loc;
 
         return res;
