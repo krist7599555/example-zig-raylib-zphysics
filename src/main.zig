@@ -1,6 +1,5 @@
 const std = @import("std");
 const rl = @import("raylib");
-const Jolt = @import("./jolt.zig");
 const Config = @import("./config.zig").GameConfig;
 const GameWorld = @import("./game_world.zig").GameWorld;
 const vec3jtr = @import("./vec.zig").vec3jtr;
@@ -8,6 +7,8 @@ const Player = @import("./player.zig").Player;
 const Util = @import("./util.zig");
 const AppShader = @import("./shader/index.zig");
 const AppShape = @import("./shape.zig");
+const physic = @import("./physic.zig");
+const ShadowMapper = @import("./shadow_maper.zig").ShadowMapper;
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -17,7 +18,7 @@ pub fn main() !void {
     var pcg = std.Random.Pcg.init(seed);
     const random = pcg.random();
 
-    var physics = try Jolt.JoltWrapper.init(allocator);
+    var physics = try physic.Backend.init(allocator);
     defer physics.destroy(allocator);
 
     physics.physics_system.setGravity(.{ 0, -Config.gravity, 0 });
@@ -31,8 +32,6 @@ pub fn main() !void {
     rl.initWindow(Config.screen_width, Config.screen_height, "Zig Game");
     defer rl.closeWindow();
     rl.setTargetFPS(Config.fps);
-
-    const ShadowMapper = @import("./shadow_maper.zig").ShadowMapper;
 
     var shadow_mapper = try ShadowMapper.init(.{
         .resolution = Config.shadow_map.resolution,

@@ -140,7 +140,7 @@ const ContactListener = extern struct {
 };
 // END copy
 
-pub const JoltWrapper = struct {
+pub const Backend = struct {
     pub const ObjectLayer = object_layers;
 
     broad_phase_layer_interface: *BroadPhaseLayerInterface,
@@ -149,7 +149,7 @@ pub const JoltWrapper = struct {
     contact_listener: *ContactListener,
     physics_system: *zphy.PhysicsSystem,
 
-    pub fn init(allocator: std.mem.Allocator) !*JoltWrapper {
+    pub fn init(allocator: std.mem.Allocator) !*Backend {
         try zphy.init(allocator, .{});
 
         const broad_phase_layer_interface = try allocator.create(BroadPhaseLayerInterface);
@@ -176,7 +176,7 @@ pub const JoltWrapper = struct {
             },
         );
 
-        const wrapper = try allocator.create(JoltWrapper);
+        const wrapper = try allocator.create(Backend);
         wrapper.* = .{
             .broad_phase_layer_interface = broad_phase_layer_interface,
             .object_vs_broad_phase_layer_filter = object_vs_broad_phase_layer_filter,
@@ -188,7 +188,7 @@ pub const JoltWrapper = struct {
         return wrapper;
     }
 
-    pub fn destroy(self: *JoltWrapper, allocator: std.mem.Allocator) void {
+    pub fn destroy(self: *Backend, allocator: std.mem.Allocator) void {
         self.physics_system.destroy();
         allocator.destroy(self.contact_listener);
         allocator.destroy(self.object_vs_broad_phase_layer_filter);
@@ -198,7 +198,7 @@ pub const JoltWrapper = struct {
         allocator.destroy(self);
     }
 
-    pub fn update(self: *JoltWrapper, dt: f32) void {
+    pub fn update(self: *Backend, dt: f32) void {
         self.physics_system.update(dt, .{}) catch unreachable;
     }
 };

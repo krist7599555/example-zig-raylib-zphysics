@@ -3,7 +3,7 @@ const rl = @import("raylib");
 const zphy = @import("zphysics");
 const Util = @import("./util.zig");
 const Player = @import("./player.zig").Player;
-const Jolt = @import("./jolt.zig");
+const physic = @import("./physic.zig");
 
 pub const GameObject = struct {
     model: rl.Model,
@@ -36,11 +36,11 @@ pub const GameWorld = struct {
     physics_system: *zphy.PhysicsSystem,
     allocator: std.mem.Allocator,
     player: ?Player = null,
-    pub fn init(allocator: std.mem.Allocator, jolt_wrapper: *Jolt.JoltWrapper) !GameWorld {
+    pub fn init(allocator: std.mem.Allocator, physic_backend: *physic.Backend) !GameWorld {
         return GameWorld{
             .game_objects = try std.ArrayList(GameObject).initCapacity(allocator, 0),
-            .body_interface = jolt_wrapper.physics_system.getBodyInterfaceMut(),
-            .physics_system = jolt_wrapper.physics_system,
+            .body_interface = physic_backend.physics_system.getBodyInterfaceMut(),
+            .physics_system = physic_backend.physics_system,
             .allocator = allocator,
         };
     }
@@ -65,8 +65,8 @@ pub const GameWorld = struct {
     pub fn createBody(game: *@This(), args_: CreateBodyArg) !zphy.BodyId {
         var args = args_;
         args.physic.object_layer = switch (args.physic.motion_type) {
-            .static => @import("./jolt.zig").object_layers.non_moving,
-            .dynamic, .kinematic => @import("./jolt.zig").object_layers.moving,
+            .static => physic.object_layers.non_moving,
+            .dynamic, .kinematic => physic.object_layers.moving,
         };
         if (args.physic.shape == null) return rl.RaylibError.LoadModel;
 

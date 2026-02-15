@@ -2,7 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
 
-const Jolt = @import("./jolt.zig");
+const physic = @import("./physic.zig");
 const splat = @import("./vec.zig").splat;
 const vec3jtr = @import("./vec.zig").vec3jtr;
 const GameWorld = @import("./game_world.zig").GameWorld;
@@ -40,7 +40,7 @@ pub const Player = struct {
         defer characterSettings.release();
 
         // 1. ตั้งค่าพื้นฐาน (Basic properties)
-        characterSettings.layer = Jolt.object_layers.moving;
+        characterSettings.layer = physic.object_layers.moving;
         characterSettings.mass = 10.0;
         characterSettings.friction = 0.5; // ปกติค่า friction จะอยู่ระหว่าง 0-1 (20.0 อาจจะหนืดเกินไป)
         characterSettings.gravity_factor = 1.0;
