@@ -5,14 +5,14 @@ const zphy = @import("zphysics");
 const physic = @import("./physic.zig");
 const splat = @import("./vec.zig").splat;
 const vec3jtr = @import("./vec.zig").vec3jtr;
-const GameWorld = @import("./game_world.zig").GameWorld;
+const WorldState = @import("./game_world.zig").WorldState;
 const shapes = @import("./shape.zig");
 
 const AppShape = @import("./shape.zig");
 const UP_VECTOR = rl.Vector3{ .x = 0, .y = 1, .z = 0 };
 
 pub const PlayerSetting = struct {
-    game: *GameWorld,
+    physic_backend: *physic.Backend,
     height: f32 = 1.8,
     radius: f32 = 0.5,
     camera: rl.Camera3D,
@@ -52,7 +52,7 @@ pub const Player = struct {
             .{ 0, 10, 0 },
             .{ 0, 0, 0, 1 },
             0,
-            arg.game.physics_system,
+            arg.physic_backend.physics_system,
         );
 
         character.addToPhysicsSystem(.{});
@@ -71,7 +71,6 @@ pub const Player = struct {
             .headCamera = arg.camera,
             .model = model,
         };
-        arg.game.player = player;
         return player;
     }
 

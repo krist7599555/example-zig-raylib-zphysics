@@ -1,7 +1,7 @@
 const std = @import("std");
 const zphy = @import("zphysics");
 const rl = @import("raylib");
-
+const physic = @import("./physic.zig");
 // BEGIN -COPYCODE
 // https://github.com/zig-gamedev/zig-gamedev/blob/main/samples/physics_test_wgpu/src/physics_test_wgpu.zig#L51
 
@@ -200,5 +200,18 @@ pub const Backend = struct {
 
     pub fn update(self: *Backend, dt: f32) void {
         self.physics_system.update(dt, .{}) catch unreachable;
+    }
+
+    // Halper
+
+    pub fn add(self: *Backend, arg_: zphy.BodyCreationSettings) !zphy.BodyId {
+        var arg = arg_;
+        arg.object_layer = switch (arg.motion_type) {
+            .static => physic.object_layers.non_moving,
+            .dynamic, .kinematic => physic.object_layers.moving,
+        };
+        return try self.physics_system
+            .getBodyInterfaceMut()
+            .createAndAddBody(arg, .activate);
     }
 };
