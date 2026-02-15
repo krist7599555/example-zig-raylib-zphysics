@@ -1,18 +1,13 @@
 const std = @import("std");
 const zphy = @import("zphysics");
 const rl = @import("raylib");
-const vec3 = @import("./vec.zig").vec3;
-const vec4 = @import("./vec.zig").vec4;
-const Vec2 = @Vector(2, f32);
-const Vec3 = @Vector(3, f32);
-const Vec4 = @Vector(4, f32);
 
 // BEGIN My Own
 const ZphysicsError = error{
     CreateBoxShapeSettingsError,
     CreateBoxShapeError,
 };
-pub fn createBoxShape(full_extent: Vec3) ZphysicsError!*zphy.Shape {
+pub fn createBoxShape(full_extent: @Vector(3, f32)) ZphysicsError!*zphy.Shape {
     const box_settings = zphy.BoxShapeSettings.create(.{
         full_extent[0] / 2.0,
         full_extent[1] / 2.0,

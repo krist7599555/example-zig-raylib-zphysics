@@ -4,12 +4,7 @@ const zphy = @import("zphysics");
 
 const Jolt = @import("./jolt.zig");
 const splat = @import("./vec.zig").splat;
-const vec3 = @import("./vec.zig").vec3;
-const vec4 = @import("./vec.zig").vec4;
 const vec3jtr = @import("./vec.zig").vec3jtr;
-const Vec2 = @Vector(2, f32);
-const Vec3 = @Vector(3, f32);
-const Vec4 = @Vector(4, f32);
 const GameWorld = @import("./game_world.zig").GameWorld;
 
 const AppShape = @import("./shape.zig");

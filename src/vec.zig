@@ -1,13 +1,8 @@
 const std = @import("std");
 const rl = @import("raylib");
 
-pub const Vec2 = @Vector(2, f32);
 pub const Vec3 = @Vector(3, f32);
 pub const Vec4 = @Vector(4, f32);
-
-pub fn splat(val: f32) Vec4 {
-    return Vec4{ val, val, val, val };
-}
 
 pub fn vec4(obj: anytype) Vec4 {
     const T = @TypeOf(obj);

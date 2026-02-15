@@ -36,16 +36,3 @@ pub fn randomFloat(random: std.Random, at_least: f32, less_than: f32) f32 {
     // (r * range) + at_least -> [at_least, less_than)
     return (r * range) + at_least;
 }
-
-pub fn applyBodyTransform(body_interface: *zphy.BodyInterface, body_id: zphy.BodyId) void {
-    const pos: [3]f32 = body_interface.getPosition(body_id);
-    const rot: [4]f32 = body_interface.getRotation(body_id);
-
-    var axis: rl.Vector3 = undefined;
-    var angle: f32 = undefined;
-    rl.Quaternion.init(rot[0], rot[1], rot[2], rot[3]).toAxisAngle(&axis, &angle);
-    const rad2deg = 180.0 / std.math.pi;
-
-    rl.gl.rlTranslatef(pos[0], pos[1], pos[2]);
-    rl.gl.rlRotatef(angle * rad2deg, axis.x, axis.y, axis.z); // rlgl ใช้หน่วยองศา (Degree)
-}

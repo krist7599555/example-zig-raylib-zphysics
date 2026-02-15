@@ -5,7 +5,6 @@ const zphy = @import("zphysics");
 const zphy_helper = @import("./zphy_helper.zig");
 const Jolt = @import("./jolt.zig");
 const Config = @import("./config.zig").GameConfig;
-// const game_world = @import("./game_world.zig").game_world;
 const GameWorld = @import("./game_world.zig").GameWorld;
 const splat = @import("./vec.zig").splat;
 const vec3 = @import("./vec.zig").vec3;

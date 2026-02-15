@@ -1,11 +1,6 @@
 const std = @import("std");
 const zphy = @import("zphysics");
 const rl = @import("raylib");
-const vec3 = @import("./vec.zig").vec3;
-const vec4 = @import("./vec.zig").vec4;
-const Vec2 = @Vector(2, f32);
-const Vec3 = @Vector(3, f32);
-const Vec4 = @Vector(4, f32);
 
 // BEGIN -COPYCODE
 // https://github.com/zig-gamedev/zig-gamedev/blob/main/samples/physics_test_wgpu/src/physics_test_wgpu.zig#L51

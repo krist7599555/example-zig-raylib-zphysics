@@ -4,7 +4,6 @@ const zphy = @import("zphysics");
 const Util = @import("./util.zig");
 const Player = @import("./player.zig").Player;
 const Jolt = @import("./jolt.zig");
-const vec4 = @import("./vec.zig").vec4;
 
 const DIFFUSE_IDX: usize = @as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE));
 
@@ -59,7 +58,7 @@ pub const GameWorld = struct {
             rl.gl.rlPushMatrix();
             defer rl.gl.rlPopMatrix();
 
-            Util.applyBodyTransform(self.body_interface, obj.body_id);
+            _applyBodyTransform(self.body_interface, obj.body_id);
 
             obj.draw();
         }
@@ -94,3 +93,16 @@ pub const GameWorld = struct {
         return undefined;
     }
 };
+
+fn _applyBodyTransform(body_interface: *zphy.BodyInterface, body_id: zphy.BodyId) void {
+    const pos: [3]f32 = body_interface.getPosition(body_id);
+    const rot: [4]f32 = body_interface.getRotation(body_id);
+
+    var axis: rl.Vector3 = undefined;
+    var angle: f32 = undefined;
+    rl.Quaternion.init(rot[0], rot[1], rot[2], rot[3]).toAxisAngle(&axis, &angle);
+    const rad2deg = 180.0 / std.math.pi;
+
+    rl.gl.rlTranslatef(pos[0], pos[1], pos[2]);
+    rl.gl.rlRotatef(angle * rad2deg, axis.x, axis.y, axis.z); // rlgl ใช้หน่วยองศา (Degree)
+}
