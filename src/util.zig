@@ -1,7 +1,7 @@
 const rl = @import("raylib");
 const std = @import("std");
 
-pub fn randomColor(random: std.Random) rl.Color {
+pub fn rand_color(random: std.Random) rl.Color {
     return rl.Color.init(
         random.uintLessThan(u8, 255),
         random.uintLessThan(u8, 255),
@@ -10,7 +10,7 @@ pub fn randomColor(random: std.Random) rl.Color {
     );
 }
 
-pub fn randomFloat(random: std.Random, at_least: f32, less_than: f32) f32 {
+pub fn rand_f32(random: std.Random, at_least: f32, less_than: f32) f32 {
     // 1. random.float(f32) จะคืนค่าในช่วง [0.0, 1.0)
     const r = random.float(f32);
 

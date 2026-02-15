@@ -25,20 +25,20 @@ fn Uniform(comptime T: type, comptime name: []const u8) type {
     };
 }
 
-const ShadowShaderUniform = struct {
-    colDiffuse: Uniform(rl.Vector4, "colDiffuse") = .{},
-    lightDir: Uniform(rl.Vector3, "lightDir") = .{},
+const ShadowMapUniform = struct {
+    diffuse_color: Uniform(rl.Vector4, "diffuse_color") = .{},
+    light_direction: Uniform(rl.Vector3, "light_direction") = .{},
     light_color: Uniform(rl.Vector4, "light_color") = .{},
     ambient_color: Uniform(rl.Vector4, "ambient_color") = .{},
-    viewPos: Uniform(rl.Vector3, "viewPos") = .{}, // = camera position =
-    lightVP: Uniform(rl.Matrix, "lightVP") = .{},
+    view_position: Uniform(rl.Vector3, "view_position") = .{}, // = camera position =
+    light_view_proj: Uniform(rl.Matrix, "light_view_proj") = .{},
     depth_texture_size: Uniform(i32, "depth_texture_size") = .{},
     depth_target: Uniform(i32, "depth_target") = .{}, // sampler2D
 };
 
-pub const ShadowShader = struct {
+pub const ShadowMap = struct {
     shader: rl.Shader = undefined,
-    uniform: ShadowShaderUniform,
+    uniform: ShadowMapUniform,
 
     const vert =
         \\#version 330
@@ -89,19 +89,19 @@ pub const ShadowShader = struct {
         \\
         \\// Input uniform values
         \\uniform sampler2D texture0;
-        \\uniform vec4 colDiffuse;
+        \\uniform vec4 diffuse_color;
         \\
         \\// Output fragment color
         \\out vec4 finalColor;
         \\
         \\// Input lighting values
-        \\uniform vec3 lightDir;
+        \\uniform vec3 light_direction;
         \\uniform vec4 light_color;
         \\uniform vec4 ambient_color;
-        \\uniform vec3 viewPos;
+        \\uniform vec3 view_position;
         \\
         \\// Input shadowmapping values
-        \\uniform mat4 lightVP; // Light source view-projection matrix
+        \\uniform mat4 light_view_proj; // Light source view-projection matrix
         \\uniform sampler2D depth_target;
         \\
         \\uniform int depth_texture_size;
@@ -112,10 +112,10 @@ pub const ShadowShader = struct {
         \\    vec4 texelColor = texture(texture0, fragTexCoord);
         \\    vec3 lightDot = vec3(0.0);
         \\    vec3 normal = normalize(fragNormal);
-        \\    vec3 viewD = normalize(viewPos - fragPosition);
+        \\    vec3 viewD = normalize(view_position - fragPosition);
         \\    vec3 specular = vec3(0.0);
         \\
-        \\    vec3 l = -lightDir;
+        \\    vec3 l = -light_direction;
         \\
         \\    float NdotL = max(dot(normal, l), 0.0);
         \\    lightDot += light_color.rgb*NdotL;
@@ -124,11 +124,11 @@ pub const ShadowShader = struct {
         \\    //if (NdotL > 0.0) specCo = pow(max(0.0, dot(viewD, reflect(-(l), normal))), 16.0); // 16 refers to shine
         \\    //specular += specCo;
         \\
-        \\    finalColor = (texelColor*((colDiffuse + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
+        \\    finalColor = (texelColor*((diffuse_color + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
         \\
         \\    // Shadow calculations
         \\    // f(fragPosition) -> depth_targetCoor
-        \\    vec4 fragPosLightSpace = lightVP * vec4(fragPosition, 1);
+        \\    vec4 fragPosLightSpace = light_view_proj * vec4(fragPosition, 1);
         \\    fragPosLightSpace.xyz /= fragPosLightSpace.w; // Perform the perspective division
         \\    fragPosLightSpace.xyz = (fragPosLightSpace.xyz + 1.0f) / 2.0f; // Transform from [-1, 1] range to [0, 1] range
         \\    vec2 sampleCoords = fragPosLightSpace.xy;
@@ -166,11 +166,11 @@ pub const ShadowShader = struct {
         \\    if (shadowCounter > 0 && (ditherY || ditherX)) finalColor = vec4(0.0, 0.0, 0.0, 1.0);
         \\
         \\    //finalColor = mix(finalColor, vec4(0, 0, 0, 1), float(shadowCounter) / float(numSamples));
-        \\    //finalColor += texelColor*(ambient_color/10.0)*colDiffuse;
+        \\    //finalColor += texelColor*(ambient_color/10.0)*diffuse_color;
         \\    //finalColor = pow(finalColor, vec4(1.0/2.2));
         \\}
     ;
-    pub fn init() !ShadowShader {
+    pub fn init() !ShadowMap {
         var res = @This(){
             .shader = try rl.loadShaderFromMemory(vert, frag),
             .uniform = .{},
@@ -178,9 +178,9 @@ pub const ShadowShader = struct {
         inline for (@typeInfo(@TypeOf(res.uniform)).@"struct".fields) |f| {
             @field(res.uniform, f.name).init(res.shader);
         }
-        res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.vector_view))] = res.uniform.viewPos.loc;
+        res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.vector_view))] = res.uniform.view_position.loc;
         res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_ambient))] = res.uniform.ambient_color.loc;
-        res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_diffuse))] = res.uniform.colDiffuse.loc;
+        res.shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_diffuse))] = res.uniform.diffuse_color.loc;
 
         return res;
     }

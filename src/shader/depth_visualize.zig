@@ -1,6 +1,6 @@
 const rl = @import("raylib");
 
-pub const DebugDepthShader = struct {
+pub const DepthVisualize = struct {
     shader: rl.Shader,
 
     const vert =
@@ -36,9 +36,18 @@ pub const DebugDepthShader = struct {
         \\}
     ;
 
-    pub fn init() !DebugDepthShader {
+    pub fn init() !DepthVisualize {
         return .{
             .shader = try rl.loadShaderFromMemory(vert, frag),
         };
+    }
+    pub fn deinit(self: @This()) void {
+        rl.unloadShader(self.shader);
+    }
+    pub fn begin_shader(self: @This()) void {
+        rl.beginShaderMode(self.shader);
+    }
+    pub fn end_shader(_: @This()) void {
+        rl.endShaderMode();
     }
 };

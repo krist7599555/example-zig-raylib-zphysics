@@ -11,19 +11,19 @@ in vec3 fragNormal;
 
 // Input uniform values
 uniform sampler2D texture0;
-uniform vec4 colDiffuse;
+uniform vec4 diffuse_color;
 
 // Output fragment color
 out vec4 finalColor;
 
 // Input lighting values
-uniform vec3 lightDir;
+uniform vec3 light_direction;
 uniform vec4 light_color;
 uniform vec4 ambient_color;
-uniform vec3 viewPos;
+uniform vec3 view_position;
 
 // Input shadowmapping values
-uniform mat4 lightVP; // Light source view-projection matrix
+uniform mat4 light_view_proj; // Light source view-projection matrix
 uniform sampler2D depth_target;
 
 uniform int depth_texture_size;
@@ -34,10 +34,10 @@ void main()
     vec4 texelColor = texture(texture0, fragTexCoord);
     vec3 lightDot = vec3(0.0);
     vec3 normal = normalize(fragNormal);
-    vec3 viewD = normalize(viewPos - fragPosition);
+    vec3 viewD = normalize(view_position - fragPosition);
     vec3 specular = vec3(0.0);
 
-    vec3 l = -lightDir;
+    vec3 l = -light_direction;
 
     float NdotL = max(dot(normal, l), 0.0);
     lightDot += light_color.rgb*NdotL;
@@ -46,11 +46,11 @@ void main()
     //if (NdotL > 0.0) specCo = pow(max(0.0, dot(viewD, reflect(-(l), normal))), 16.0); // 16 refers to shine
     //specular += specCo;
 
-    finalColor = (texelColor*((colDiffuse + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
+    finalColor = (texelColor*((diffuse_color + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
 
     // Shadow calculations
     // f(fragPosition) -> depth_targetCoor
-    vec4 fragPosLightSpace = lightVP * vec4(fragPosition, 1);
+    vec4 fragPosLightSpace = light_view_proj * vec4(fragPosition, 1);
     fragPosLightSpace.xyz /= fragPosLightSpace.w; // Perform the perspective division
     fragPosLightSpace.xyz = (fragPosLightSpace.xyz + 1.0f) / 2.0f; // Transform from [-1, 1] range to [0, 1] range
     vec2 sampleCoords = fragPosLightSpace.xy;
@@ -88,6 +88,6 @@ void main()
     if (shadowCounter > 0 && (ditherY || ditherX)) finalColor = vec4(0.0, 0.0, 0.0, 1.0);
 
     //finalColor = mix(finalColor, vec4(0, 0, 0, 1), float(shadowCounter) / float(numSamples));
-    //finalColor += texelColor*(ambient_color/10.0)*colDiffuse;
+    //finalColor += texelColor*(ambient_color/10.0)*diffuse_color;
     //finalColor = pow(finalColor, vec4(1.0/2.2));
 }

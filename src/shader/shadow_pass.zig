@@ -1,10 +1,10 @@
 const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
-const physic = @import("./physic.zig");
-const Player = @import("./player.zig").PlayerEntity;
-const Util = @import("./util.zig");
-const AppShader = @import("./shader/index.zig");
+const physic = @import("../physic.zig");
+const Player = @import("../player.zig").PlayerEntity;
+const Util = @import("../util.zig");
+const shaders = @import("../shader/index.zig");
 
 const PassConfig = struct {
     texture_resolution: i32 = 1024 * 2,
@@ -19,13 +19,20 @@ pub const ShadowMapPass = struct {
     depth_target: rl.RenderTexture2D,
     size: i32,
     depth_shader: rl.Shader,
-    _shader: AppShader.ShadowShader,
+    _shader: shaders.ShadowMap,
+
+    pub fn get_texture_rgb(self: @This()) rl.Texture {
+        return self.depth_target.texture;
+    }
+    pub fn get_texture_depth(self: @This()) rl.Texture {
+        return self.depth_target.depth;
+    }
 
     pub fn init(config: PassConfig) !ShadowMapPass {
         // NOTE: raylib will not throw error if file not exists
-        const _shader = try AppShader.ShadowShader.init();
+        const _shader = try shaders.ShadowMap.init();
 
-        _shader.uniform.lightDir.set(config.light_dir.normalize());
+        _shader.uniform.light_direction.set(config.light_dir.normalize());
         _shader.uniform.light_color.set(rl.colorNormalize(config.light_color));
         _shader.uniform.ambient_color.set(rl.colorNormalize(config.ambient_color));
         _shader.uniform.depth_texture_size.set(config.texture_resolution);
@@ -45,19 +52,19 @@ pub const ShadowMapPass = struct {
         };
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *const @This()) void {
         rl.unloadShader(self.depth_shader);
         self.depth_target.unload();
     }
 
-    pub fn begin(self: @This()) void {
+    pub fn begin_shadow_pass(self: @This()) void {
         self.depth_target.begin();
         self.light_camera.begin();
 
         rl.gl.rlClearScreenBuffers();
         // then draw
     }
-    pub fn end(self: @This()) void {
+    pub fn end_shadow_pass(self: @This()) void {
 
         // after draw finished
         // IMPORTANT UPDATE DEPT TEXTURE TO memo shader program
@@ -73,9 +80,9 @@ pub const ShadowMapPass = struct {
         defer self.light_camera.end();
         const lightView = rl.gl.rlGetMatrixModelview();
         const lightProj = rl.gl.rlGetMatrixProjection();
-        const lightVP = lightView.multiply(lightProj);
-        // DO: glsl(uniform mat4 lightVP) -> mat(light_view_proj_mat)
-        self._shader.uniform.lightVP.set(lightVP);
+        const light_view_proj = lightView.multiply(lightProj);
+        // DO: glsl(uniform mat4 light_view_proj) -> mat(light_view_proj_mat)
+        self._shader.uniform.light_view_proj.set(light_view_proj);
     }
     fn writeDepthTexture(self: @This()) void {
         // ตั้ง state ให้ GPU รู้เรื่อง

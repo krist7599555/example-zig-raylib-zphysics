@@ -5,6 +5,7 @@ const zphy = @import("zphysics");
 const physic = @import("./physic.zig");
 const vec3jtr = @import("./vec.zig").vec3jtr;
 const shapes = @import("./shape.zig");
+const game = @import("./game.zig");
 
 const AppShape = @import("./shape.zig");
 const UP_VECTOR = rl.Vector3{ .x = 0, .y = 1, .z = 0 };
@@ -20,12 +21,8 @@ pub const PlayerSetting = struct {
 pub const PlayerEntity = struct {
     character: *zphy.Character,
     headCamera: rl.Camera3D,
+    enitity: game.Entity,
     firstPerson: bool = false,
-
-    model: rl.Model,
-
-    height: f32,
-    radius: f32,
 
     pub fn init(
         arg: PlayerSetting,
@@ -61,32 +58,40 @@ pub const PlayerEntity = struct {
         }
 
         const player = PlayerEntity{
-            .height = arg.height,
-            .radius = arg.radius,
             .character = character,
             .headCamera = arg.camera,
-            .model = model,
+            .enitity = game.Entity{
+                .model = model,
+                .ref = .{ .character = character },
+            },
         };
         return player;
     }
 
-    pub fn update(self: *PlayerEntity) void {
-        if (rl.isKeyPressed(.e)) {
+    pub fn update(self: *@This()) void {
+        if (rl.isKeyPressed(.e)) { // switch camera
             self.firstPerson = !self.firstPerson;
         }
-        self.rotateHeadFromMouseInput();
-        self.walkOnXZaxisFromKeyInput();
+        if (rl.isKeyPressed(.space)) { // jump + jump on air
+            const v = self.character.getLinearVelocity();
+            self.character.setLinearVelocity(.{ v[0], 10, v[2] });
+        }
+        if (self.enitity.position()[1] < -100) { // fallout = restart
+            self.character.setPosition(.{ 0, 5, 0 });
+        }
+        self._rotateHeadFromMouseInput();
+        self._walkOnXZaxisFromKeyInput();
     }
 
-    pub fn getForwardVectorXZ(camera: *const rl.Camera) rl.Vector3 {
+    fn _getForwardVectorXZ(camera: *const rl.Camera) rl.Vector3 {
         const out = camera.target.subtract(camera.position);
         return rl.Vector3.init(out.x, 0, out.z).normalize();
     }
 
-    pub fn walkOnXZaxisFromKeyInput(self: *PlayerEntity) void {
+    fn _walkOnXZaxisFromKeyInput(self: @This()) void {
         const curr_v: rl.Vector3 = vec3jtr(self.character.getLinearVelocity());
 
-        const dir_w_s: rl.Vector3 = getForwardVectorXZ(&self.headCamera);
+        const dir_w_s: rl.Vector3 = _getForwardVectorXZ(&self.headCamera);
         const dir_d_a: rl.Vector3 = dir_w_s.crossProduct(UP_VECTOR).normalize();
 
         const new_v_xz = blk: {
@@ -104,7 +109,7 @@ pub const PlayerEntity = struct {
         }
     }
 
-    pub fn rotateHeadFromMouseInput(self: *PlayerEntity) void {
+    fn _rotateHeadFromMouseInput(self: *@This()) void {
         const d = rl.getMouseDelta();
 
         const curr_arm = self.headCamera.target.subtract(self.headCamera.position); // x_vector
@@ -126,11 +131,5 @@ pub const PlayerEntity = struct {
             self.headCamera.target = vec3jtr(position);
             self.headCamera.position = vec3jtr(position).subtract(new_arm);
         }
-    }
-
-    pub fn draw(self: *const PlayerEntity) void {
-        if (self.firstPerson) return; // if first person - not draw
-        const position = self.character.getPosition();
-        self.model.draw(rl.Vector3.init(position[0], position[1] - self.height * 0.5, position[2]), 1.0, .white);
     }
 };

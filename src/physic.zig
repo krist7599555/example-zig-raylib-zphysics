@@ -221,4 +221,8 @@ pub const Backend = struct {
 
         return body;
     }
+
+    pub fn optimize(self: @This()) void {
+        self.physics_system.optimizeBroadPhase();
+    }
 };
