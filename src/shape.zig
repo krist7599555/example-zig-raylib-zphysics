@@ -28,7 +28,9 @@ pub fn plane_shape(size: Vec2) !*zphy.Shape {
 }
 
 pub fn cylinder_mesh(radius: f32, height: f32, sub: i32) rl.Mesh {
-    return rl.genMeshCylinder(radius, height, sub);
+    var mesh = rl.genMeshCylinder(radius, height, sub);
+    translateMesh(&mesh, .init(0, -height / 2, 0));
+    return mesh;
 }
 pub fn cylinder_shape(radius: f32, height: f32) !*zphy.Shape {
     const setting = try zphy.CylinderShapeSettings.create(height * 0.5, radius);
@@ -44,4 +46,15 @@ pub fn capsule_mesh(radius: f32, height: f32, sub: i32) rl.Mesh {
 pub fn capsule_shape(radius: f32, height: f32) !*zphy.Shape {
     const setting = try zphy.CapsuleShapeSettings.create(height * 0.5, radius);
     return try setting.asShapeSettings().createShape();
+}
+
+pub fn translateMesh(mesh: *rl.Mesh, offset: rl.Vector3) void {
+    var i: usize = 0;
+    while (i < mesh.vertexCount) : (i += 1) {
+        const base = i * 3;
+        mesh.vertices[base + 0] += offset.x;
+        mesh.vertices[base + 1] += offset.y;
+        mesh.vertices[base + 2] += offset.z;
+    }
+    rl.updateMeshBuffer(mesh.*, 0, mesh.vertices, mesh.vertexCount * 3 * @sizeOf(f32), 0);
 }
