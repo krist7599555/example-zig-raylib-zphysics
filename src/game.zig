@@ -13,14 +13,17 @@ pub const PhysicsHandle = union(enum) {
 
 pub const Entity = struct {
     model: rl.Model,
-    tint: rl.Color = rl.Color.white,
     ref: PhysicsHandle,
+    tint: rl.Color = rl.Color.white,
+    scale: rl.Vector3 = .init(1, 1, 1), // optimize draw
 
     pub fn draw(self: @This()) void {
-        self.model.draw(rl.Vector3.zero(), 1.0, self.tint);
+        self.begin_transform();
+        defer self.end_transform();
+        self.model.draw(.zero(), 1.0, self.tint);
     }
     pub fn drawWires(self: @This()) void {
-        self.model.drawWires(rl.Vector3.zero(), 1.0, .white);
+        self.model.drawWires(.zero(), 1.0, .white);
     }
     pub fn position(self: @This()) [3]f32 {
         return switch (self.ref) {
@@ -33,6 +36,22 @@ pub const Entity = struct {
             .body => |b| b.getRotation(),
             .character => .{ 0, 0, 0, 1 },
         };
+    }
+    pub fn begin_transform(self: @This()) void {
+        rl.gl.rlPushMatrix();
+
+        const pos = self.position();
+        rl.gl.rlTranslatef(pos[0], pos[1], pos[2]);
+
+        const rot = self.rotation();
+        const rot_mat = rl.Quaternion.toMatrix(.init(rot[0], rot[1], rot[2], rot[3]));
+        rl.gl.rlMultMatrixf(@as([*]const f32, @ptrCast(&rot_mat.m0))[0..16]);
+
+        const scale = self.scale;
+        rl.gl.rlScalef(scale.x, scale.y, scale.z);
+    }
+    pub fn end_transform(_: @This()) void {
+        rl.gl.rlPopMatrix();
     }
 };
 
@@ -66,24 +85,12 @@ pub const CreateBodyArg = struct {
         mesh: rl.Mesh,
         shader: ?rl.Shader = null,
         tint: rl.Color = .white,
+        scale: rl.Vector3 = .init(1, 1, 1),
     },
     physic: zphy.BodyCreationSettings,
     game_state: *game.State,
     physic_backend: *physic.Backend,
 };
-
-fn _applyBodyTransform(
-    pos: [3]f32,
-    rot: [4]f32,
-) void {
-    var axis: rl.Vector3 = undefined;
-    var angle: f32 = undefined;
-    rl.Quaternion.init(rot[0], rot[1], rot[2], rot[3]).toAxisAngle(&axis, &angle);
-    const rad2deg = 180.0 / std.math.pi;
-
-    rl.gl.rlTranslatef(pos[0], pos[1], pos[2]);
-    rl.gl.rlRotatef(angle * rad2deg, axis.x, axis.y, axis.z); // rlgl ใช้หน่วยองศา (Degree)
-}
 
 pub fn createBody(args_: CreateBodyArg) !*zphy.Body {
     var args = args_;
@@ -95,8 +102,9 @@ pub fn createBody(args_: CreateBodyArg) !*zphy.Body {
     }
     try args.game_state.add(.{
         .model = model,
-        .tint = args.graphic.tint,
         .ref = .{ .body = body },
+        .tint = args.graphic.tint,
+        .scale = args.graphic.scale,
     });
 
     return body;
@@ -104,14 +112,6 @@ pub fn createBody(args_: CreateBodyArg) !*zphy.Body {
 
 pub fn draw(state: *game.State) void {
     for (state.entities.items) |obj| {
-        rl.gl.rlPushMatrix();
-        defer rl.gl.rlPopMatrix();
-
-        _applyBodyTransform(
-            obj.position(),
-            obj.rotation(),
-        );
-
         obj.draw();
     }
 }

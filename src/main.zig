@@ -52,6 +52,7 @@ pub fn main() !void {
         });
     }
 
+    const unit_sphere_mesh = shapes.sphere_mesh(1.0, 10, 16);
     for (0..100) |i| {
         // CREATE 100 RANDOM BALL
         const radius = Util.randomFloat(random, 0.2, 2.0);
@@ -59,9 +60,10 @@ pub fn main() !void {
             .physic_backend = physic_backend,
             .game_state = &game_state,
             .graphic = .{
-                .mesh = shapes.sphere_mesh(radius, 10, 16),
+                .mesh = unit_sphere_mesh,
                 .shader = shadow_pass.depth_shader,
                 .tint = Util.randomColor(random),
+                .scale = .init(radius, radius, radius),
             },
             .physic = .{
                 .shape = try shapes.sphere_shape(radius),
@@ -76,6 +78,7 @@ pub fn main() !void {
             },
         });
     }
+    const unit_box_mesh = shapes.box_mesh(.{ 1, 1, 1 });
     for (0..100) |i| {
         // CREATE 100 RANDOM BOX
         const size = @Vector(3, f32){
@@ -87,9 +90,10 @@ pub fn main() !void {
             .physic_backend = physic_backend,
             .game_state = &game_state,
             .graphic = .{
-                .mesh = shapes.box_mesh(size),
+                .mesh = unit_box_mesh,
                 .shader = shadow_pass.depth_shader,
                 .tint = Util.randomColor(random),
+                .scale = .initVec(size),
             },
             .physic = .{
                 .shape = try shapes.box_shape(size),
