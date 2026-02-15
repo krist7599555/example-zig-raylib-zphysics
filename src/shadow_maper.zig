@@ -1,8 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
-const zm = @import("zmath");
-const znoise = @import("znoise");
+
 const zphy_helper = @import("./zphy_helper.zig");
 const Jolt = @import("./jolt.zig");
 const Config = @import("./config.zig").GameConfig;

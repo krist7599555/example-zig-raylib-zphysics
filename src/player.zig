@@ -1,8 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
-const zm = @import("zmath");
-const znoise = @import("znoise");
+
 const Jolt = @import("./jolt.zig");
 const splat = @import("./vec.zig").splat;
 const vec3 = @import("./vec.zig").vec3;

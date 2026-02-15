@@ -1,7 +1,6 @@
 const std = @import("std");
 const zphy = @import("zphysics");
 const rl = @import("raylib");
-const zm = @import("zmath");
 const vec3 = @import("./vec.zig").vec3;
 const vec4 = @import("./vec.zig").vec4;
 const Vec2 = @Vector(2, f32);
@@ -32,12 +31,6 @@ pub fn getAxisInput(pos_key: rl.KeyboardKey, neg_key: rl.KeyboardKey) f32 {
     if (rl.isKeyDown(pos_key)) val += 1.0;
     if (rl.isKeyDown(neg_key)) val -= 1.0;
     return val;
-}
-
-pub fn rotateY(current_q: Vec4, by: f32) Vec4 {
-    const dq = zm.quatFromAxisAngle(.{ 0, 1, 0, 0 }, by);
-    const new_q = zm.qmul(dq, current_q); // Rotate around world Y
-    return new_q;
 }
 
 pub fn remapClamp(val: f32, in_min: f32, in_max: f32, out_min: f32, out_max: f32) f32 {

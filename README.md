@@ -55,4 +55,3 @@ zig build run
 
 - [raylib-zig](https://github.com/Not-Cyrus/raylib-zig)
 - [zphysics](https://github.com/zig-gamedev/zphysics) (Jolt Physics wrapper)
-- [zmath](https://github.com/zig-gamedev/zmath)

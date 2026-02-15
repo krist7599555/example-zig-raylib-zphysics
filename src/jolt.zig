@@ -1,7 +1,6 @@
 const std = @import("std");
 const zphy = @import("zphysics");
 const rl = @import("raylib");
-const zm = @import("zmath");
 const vec3 = @import("./vec.zig").vec3;
 const vec4 = @import("./vec.zig").vec4;
 const Vec2 = @Vector(2, f32);
