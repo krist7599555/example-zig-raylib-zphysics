@@ -1,12 +1,9 @@
 const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
-
-const zphy_helper = @import("./zphy_helper.zig");
 const Jolt = @import("./jolt.zig");
 const Config = @import("./config.zig").GameConfig;
 const GameWorld = @import("./game_world.zig").GameWorld;
-const splat = @import("./vec.zig").splat;
 const vec3 = @import("./vec.zig").vec3;
 const vec3jtr = @import("./vec.zig").vec3jtr;
 const vec4 = @import("./vec.zig").vec4;
@@ -16,11 +13,6 @@ const Vec4 = @Vector(4, f32);
 const Player = @import("./player.zig").Player;
 const Util = @import("./util.zig");
 const AppShader = @import("./shader/index.zig");
-
-fn setShaderValue(shader: rl.Shader, comptime name: []const u8, value: *const anyopaque, uniformType: rl.ShaderUniformDataType) void {
-    const loc = rl.getShaderLocation(shader, name ++ "\x00");
-    rl.setShaderValue(shader, loc, value, uniformType);
-}
 
 const ShadowMapperConfig = struct {
     resolution: i32 = 1024 * 2,

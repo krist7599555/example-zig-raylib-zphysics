@@ -1,19 +1,5 @@
 const rl = @import("raylib");
-const zphy = @import("zphysics");
 const std = @import("std");
-
-pub fn createMaterialFromColor(color: rl.Color) !rl.Material {
-    var material = try rl.loadMaterialDefault();
-    material.maps[@as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE))].color = color;
-    return material;
-}
-
-pub fn createMaterial(shader: rl.Shader, color: rl.Color) !rl.Material {
-    var material = try rl.loadMaterialDefault();
-    material.maps[@as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE))].color = color;
-    material.shader = shader;
-    return material;
-}
 
 pub fn randomColor(random: std.Random) rl.Color {
     return rl.Color.init(

@@ -5,8 +5,6 @@ const Util = @import("./util.zig");
 const Player = @import("./player.zig").Player;
 const Jolt = @import("./jolt.zig");
 
-const DIFFUSE_IDX: usize = @as(usize, @intFromEnum(rl.MATERIAL_MAP_DIFFUSE));
-
 pub const GameObject = struct {
     model: rl.Model,
     tint: rl.Color = rl.Color.white,
