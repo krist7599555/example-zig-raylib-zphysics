@@ -2,33 +2,47 @@ const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
 const Util = @import("./util.zig");
-const Player = @import("./player.zig").Player;
+const Player = @import("./player.zig").PlayerEntity;
 const physic = @import("./physic.zig");
+const game = @This();
+
+pub const PhysicsHandle = union(enum) {
+    body: *zphy.Body,
+    character: *zphy.Character,
+};
 
 pub const Entity = struct {
     model: rl.Model,
     tint: rl.Color = rl.Color.white,
-    wires: ?rl.Color = undefined,
-    body_id: zphy.BodyId,
+    ref: PhysicsHandle,
 
-    fn draw(self: @This()) void {
+    pub fn draw(self: @This()) void {
         self.model.draw(rl.Vector3.zero(), 1.0, self.tint);
-
-        if (self.wires) |color| {
-            self.model.drawWires(rl.Vector3.zero(), 1.0, color);
-        }
+    }
+    pub fn drawWires(self: @This()) void {
+        self.model.drawWires(rl.Vector3.zero(), 1.0, .white);
+    }
+    pub fn position(self: @This()) [3]f32 {
+        return switch (self.ref) {
+            .body => |b| b.getPosition(),
+            .character => |c| c.getPosition(),
+        };
+    }
+    pub fn rotation(self: @This()) [4]f32 {
+        return switch (self.ref) {
+            .body => |b| b.getRotation(),
+            .character => .{ 0, 0, 0, 1 },
+        };
     }
 };
 
-pub const WorldState = struct {
+pub const State = struct {
     entities: std.ArrayList(Entity),
-    player: ?Player = null,
     allocator: std.mem.Allocator,
-    pub fn init(allocator: std.mem.Allocator) !WorldState {
+    pub fn init(allocator: std.mem.Allocator) !@This() {
         return .{
             .entities = try std.ArrayList(Entity).initCapacity(allocator, 0),
             .allocator = allocator,
-            .player = null,
         };
     }
     pub fn deinit(self: *@This()) void {
@@ -37,6 +51,14 @@ pub const WorldState = struct {
     pub fn add(self: *@This(), item: Entity) !void {
         try self.entities.append(self.allocator, item);
     }
+    pub fn get(self: *@This(), id: zphy.BodyId) ?Entity {
+        for (self.entities.items) |e| {
+            if (e.ref == .body and e.ref.body.id == id) {
+                return e;
+            }
+        }
+        return null;
+    }
 };
 
 pub const CreateBodyArg = struct {
@@ -44,32 +66,16 @@ pub const CreateBodyArg = struct {
         mesh: rl.Mesh,
         shader: ?rl.Shader = null,
         tint: rl.Color = .white,
-        wires: ?rl.Color = null,
     },
     physic: zphy.BodyCreationSettings,
-    world_state: *WorldState,
+    game_state: *game.State,
     physic_backend: *physic.Backend,
 };
 
-pub const GameWorld = struct {
-    body_interface: *zphy.BodyInterface,
-    physics_system: *zphy.PhysicsSystem,
-
-    pub fn init(physic_backend: *physic.Backend) !GameWorld {
-        return GameWorld{
-            .body_interface = physic_backend.physics_system.getBodyInterfaceMut(),
-            .physics_system = physic_backend.physics_system,
-        };
-    }
-    pub fn deinit(self: *@This()) void {
-        _ = self;
-    }
-};
-
-fn _applyBodyTransform(body_interface: *zphy.BodyInterface, body_id: zphy.BodyId) void {
-    const pos: [3]f32 = body_interface.getPosition(body_id);
-    const rot: [4]f32 = body_interface.getRotation(body_id);
-
+fn _applyBodyTransform(
+    pos: [3]f32,
+    rot: [4]f32,
+) void {
     var axis: rl.Vector3 = undefined;
     var angle: f32 = undefined;
     rl.Quaternion.init(rot[0], rot[1], rot[2], rot[3]).toAxisAngle(&axis, &angle);
@@ -79,34 +85,31 @@ fn _applyBodyTransform(body_interface: *zphy.BodyInterface, body_id: zphy.BodyId
     rl.gl.rlRotatef(angle * rad2deg, axis.x, axis.y, axis.z); // rlgl ใช้หน่วยองศา (Degree)
 }
 
-pub fn createBody(args_: CreateBodyArg) !zphy.BodyId {
+pub fn createBody(args_: CreateBodyArg) !*zphy.Body {
     var args = args_;
-    const body_id = try args.physic_backend.add(args.physic);
+    const body = try args.physic_backend.add(args.physic);
 
     var model = try rl.loadModelFromMesh(args.graphic.mesh);
     if (args.graphic.shader) |shader| {
         model.materials[0].shader = shader;
     }
-    try args.world_state.add(.{
+    try args.game_state.add(.{
         .model = model,
         .tint = args.graphic.tint,
-        .body_id = body_id,
-        .wires = args.graphic.wires,
+        .ref = .{ .body = body },
     });
-    return body_id;
+
+    return body;
 }
 
-pub fn draw(game_world: *GameWorld, world_state: *WorldState) void {
-    if (world_state.player) |p| {
-        p.draw();
-    }
-    for (world_state.entities.items) |obj| {
+pub fn draw(state: *game.State) void {
+    for (state.entities.items) |obj| {
         rl.gl.rlPushMatrix();
         defer rl.gl.rlPopMatrix();
 
         _applyBodyTransform(
-            game_world.body_interface,
-            obj.body_id,
+            obj.position(),
+            obj.rotation(),
         );
 
         obj.draw();

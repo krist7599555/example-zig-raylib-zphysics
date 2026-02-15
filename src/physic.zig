@@ -204,14 +204,21 @@ pub const Backend = struct {
 
     // Halper
 
-    pub fn add(self: *Backend, arg_: zphy.BodyCreationSettings) !zphy.BodyId {
+    pub fn add(self: *Backend, arg_: zphy.BodyCreationSettings) !*zphy.Body {
         var arg = arg_;
         arg.object_layer = switch (arg.motion_type) {
             .static => physic.object_layers.non_moving,
             .dynamic, .kinematic => physic.object_layers.moving,
         };
-        return try self.physics_system
+
+        const body = try self.physics_system
             .getBodyInterfaceMut()
-            .createAndAddBody(arg, .activate);
+            .createBody(arg);
+
+        self.physics_system
+            .getBodyInterfaceMut()
+            .addBody(body.id, .activate);
+
+        return body;
     }
 };

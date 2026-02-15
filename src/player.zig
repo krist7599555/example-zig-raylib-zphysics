@@ -3,9 +3,7 @@ const rl = @import("raylib");
 const zphy = @import("zphysics");
 
 const physic = @import("./physic.zig");
-const splat = @import("./vec.zig").splat;
 const vec3jtr = @import("./vec.zig").vec3jtr;
-const WorldState = @import("./game_world.zig").WorldState;
 const shapes = @import("./shape.zig");
 
 const AppShape = @import("./shape.zig");
@@ -19,7 +17,7 @@ pub const PlayerSetting = struct {
     shader: ?rl.Shader,
 };
 
-pub const Player = struct {
+pub const PlayerEntity = struct {
     character: *zphy.Character,
     headCamera: rl.Camera3D,
     firstPerson: bool = false,
@@ -31,7 +29,7 @@ pub const Player = struct {
 
     pub fn init(
         arg: PlayerSetting,
-    ) anyerror!Player {
+    ) anyerror!PlayerEntity {
         var characterSettings = try zphy.CharacterSettings.create();
         defer characterSettings.release();
 
@@ -46,7 +44,6 @@ pub const Player = struct {
         characterSettings.base.supporting_volume = .{ 0, -1, 0, 0.5 }; // Plane normal + constant
         characterSettings.base.max_slope_angle = 0.78; // ประมาณ 45 องศา (ในหน่วย Radians)
         characterSettings.base.shape = try shapes.cylinder_shape(arg.radius, arg.height);
-
         const character = try zphy.Character.create(
             characterSettings,
             .{ 0, 10, 0 },
@@ -57,14 +54,13 @@ pub const Player = struct {
 
         character.addToPhysicsSystem(.{});
 
-        const model = try rl.Model.fromMesh(
-            shapes.cylinder_mesh(arg.radius, arg.height, 12),
-        );
+        const mesh = shapes.cylinder_mesh(arg.radius, arg.height, 12);
+        const model = try rl.loadModelFromMesh(mesh);
         if (arg.shader) |shader| {
             model.materials[0].shader = shader;
         }
 
-        const player = Player{
+        const player = PlayerEntity{
             .height = arg.height,
             .radius = arg.radius,
             .character = character,
@@ -74,7 +70,7 @@ pub const Player = struct {
         return player;
     }
 
-    pub fn update(self: *Player) void {
+    pub fn update(self: *PlayerEntity) void {
         if (rl.isKeyPressed(.e)) {
             self.firstPerson = !self.firstPerson;
         }
@@ -87,7 +83,7 @@ pub const Player = struct {
         return rl.Vector3.init(out.x, 0, out.z).normalize();
     }
 
-    pub fn walkOnXZaxisFromKeyInput(self: *Player) void {
+    pub fn walkOnXZaxisFromKeyInput(self: *PlayerEntity) void {
         const curr_v: rl.Vector3 = vec3jtr(self.character.getLinearVelocity());
 
         const dir_w_s: rl.Vector3 = getForwardVectorXZ(&self.headCamera);
@@ -108,7 +104,7 @@ pub const Player = struct {
         }
     }
 
-    pub fn rotateHeadFromMouseInput(self: *Player) void {
+    pub fn rotateHeadFromMouseInput(self: *PlayerEntity) void {
         const d = rl.getMouseDelta();
 
         const curr_arm = self.headCamera.target.subtract(self.headCamera.position); // x_vector
@@ -132,7 +128,7 @@ pub const Player = struct {
         }
     }
 
-    pub fn draw(self: *const Player) void {
+    pub fn draw(self: *const PlayerEntity) void {
         if (self.firstPerson) return; // if first person - not draw
         const position = self.character.getPosition();
         self.model.draw(rl.Vector3.init(position[0], position[1] - self.height * 0.5, position[2]), 1.0, .white);

@@ -1,10 +1,10 @@
 const std = @import("std");
 const rl = @import("raylib");
+const zphy = @import("zphysics");
 const Config = @import("./config.zig").GameConfig;
-const GameWorld = @import("./game_world.zig").GameWorld;
-const game = @import("./game_world.zig");
+const game = @import("./game.zig");
 const vec3jtr = @import("./vec.zig").vec3jtr;
-const Player = @import("./player.zig").Player;
+const PlayerEntity = @import("./player.zig").PlayerEntity;
 const Util = @import("./util.zig");
 const AppShader = @import("./shader/index.zig");
 const AppShape = @import("./shape.zig");
@@ -15,40 +15,35 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const seed: u64 = 12345;
-    var pcg = std.Random.Pcg.init(seed);
+    var pcg = std.Random.Pcg.init(Config.random_seed);
     const random = pcg.random();
 
     var physic_backend = try physic.Backend.init(allocator);
     defer physic_backend.destroy(allocator);
 
-    physic_backend.physics_system.setGravity(.{ 0, -Config.gravity, 0 });
-
-    var world = try GameWorld.init(physic_backend);
-    var world_state = try game.WorldState.init(allocator);
-    defer world.deinit();
+    var game_state = try game.State.init(allocator);
 
     rl.initWindow(Config.screen_width, Config.screen_height, "Zig Game");
-    defer rl.closeWindow();
     rl.setTargetFPS(Config.fps);
+    defer rl.closeWindow();
 
     var shadow_pass = try shadow.ShadowMapPass.init(.{
         .texture_resolution = Config.shadow_map.texture_resolution,
-        .light_dir = rl.Vector3.initVec(Config.shadow_map.light_direction).normalize(),
+        .light_dir = rl.Vector3.initVec(Config.shadow_map.light_direction),
     });
     defer shadow_pass.deinit();
 
+    var ground: *zphy.Body = undefined;
     {
         // CREATE GROUND PLANE
         const plane_size = @Vector(2, f32){ 50, 50 };
-        _ = try game.createBody(.{
+        ground = try game.createBody(.{
             .physic_backend = physic_backend,
-            .world_state = &world_state,
+            .game_state = &game_state,
             .graphic = .{
                 .mesh = shapes.plane_mesh(plane_size, .{ 50, 50 }),
                 .shader = shadow_pass.depth_shader,
                 .tint = .dark_green,
-                .wires = .white,
             },
             .physic = .{
                 .shape = try shapes.plane_shape(plane_size),
@@ -62,7 +57,7 @@ pub fn main() !void {
         const radius = Util.randomFloat(random, 0.2, 2.0);
         _ = try game.createBody(.{
             .physic_backend = physic_backend,
-            .world_state = &world_state,
+            .game_state = &game_state,
             .graphic = .{
                 .mesh = shapes.sphere_mesh(radius, 10, 16),
                 .shader = shadow_pass.depth_shader,
@@ -83,16 +78,14 @@ pub fn main() !void {
     }
     for (0..100) |i| {
         // CREATE 100 RANDOM BOX
-
         const size = @Vector(3, f32){
             Util.randomFloat(random, 0.2, 2.5),
             Util.randomFloat(random, 0.2, 2.5),
             Util.randomFloat(random, 0.2, 2.5),
         };
-
         _ = try game.createBody(.{
             .physic_backend = physic_backend,
-            .world_state = &world_state,
+            .game_state = &game_state,
             .graphic = .{
                 .mesh = shapes.box_mesh(size),
                 .shader = shadow_pass.depth_shader,
@@ -113,7 +106,7 @@ pub fn main() !void {
     }
 
     // CREATE PLAYER
-    var player = try Player.init(.{
+    var player = try PlayerEntity.init(.{
         .height = 1.8,
         .radius = 0.5,
         .physic_backend = physic_backend,
@@ -126,7 +119,10 @@ pub fn main() !void {
             .projection = .perspective,
         },
     });
-    world_state.player = player;
+    try game_state.add(.{
+        .model = player.model,
+        .ref = .{ .character = player.character },
+    });
 
     physic_backend.physics_system.optimizeBroadPhase();
     const depthShader: rl.Shader = (try AppShader.DebugDepthShader.init()).shader;
@@ -141,7 +137,7 @@ pub fn main() !void {
             // Compute shadowTexture
             shadow_pass.begin();
             defer shadow_pass.end();
-            game.draw(&world, &world_state);
+            game.draw(&game_state);
         }
         {
             // DRAW
@@ -153,7 +149,10 @@ pub fn main() !void {
                 defer rl.endMode3D();
 
                 rl.clearBackground(.dark_blue);
-                game.draw(&world, &world_state);
+                game.draw(&game_state);
+                if (game_state.get(ground.id)) |g| {
+                    g.drawWires();
+                }
             }
 
             var y: i32 = 10;
@@ -164,9 +163,9 @@ pub fn main() !void {
                 rl.beginShaderMode(depthShader);
                 defer rl.endShaderMode();
                 rl.drawTextureEx(shadow_pass.depth_target.depth, .init(10, @floatFromInt(y)), 0.0, 0.3, .white);
-                rl.drawText("Shadow.Depth", 10 + 10, y + 10, 20, rl.Color.white);
-                y += 320;
             }
+            rl.drawText("Shadow.Depth", 10 + 10, y + 10, 20, rl.Color.white);
+            y += 320;
             rl.drawTextureEx(shadow_pass.depth_target.texture, .init(10, @floatFromInt(y)), 0.0, 0.3, .white);
             rl.drawText("Shadow.Texture", 10 + 10, y + 10, 20, rl.Color.light_gray);
         }

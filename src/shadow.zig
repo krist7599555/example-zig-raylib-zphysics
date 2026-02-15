@@ -2,8 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 const zphy = @import("zphysics");
 const physic = @import("./physic.zig");
-const GameWorld = @import("./game_world.zig").GameWorld;
-const Player = @import("./player.zig").Player;
+const Player = @import("./player.zig").PlayerEntity;
 const Util = @import("./util.zig");
 const AppShader = @import("./shader/index.zig");
 
