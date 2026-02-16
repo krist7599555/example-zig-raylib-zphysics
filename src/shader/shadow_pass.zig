@@ -4,7 +4,22 @@ const zphy = @import("zphysics");
 const physic = @import("../physic.zig");
 const Player = @import("../player.zig").PlayerEntity;
 const Util = @import("../util.zig");
-const ShadowMap = @import("../shader/shadow_map.zig").ShadowMap;
+const ShaderWrapper = @import("./uniform_helper.zig").ShaderWrapper;
+
+pub const ShadowMap = ShaderWrapper(
+    @embedFile("./shadow.vert"),
+    @embedFile("./shadow.frag"),
+    struct {
+        diffuse_color: rl.Vector4,
+        light_direction: rl.Vector3,
+        light_color: rl.Vector4,
+        ambient_color: rl.Vector4,
+        view_position: rl.Vector3,
+        light_view_proj: rl.Matrix,
+        depth_texture_size: i32,
+        depth_target: i32,
+    },
+);
 
 const PassConfig = struct {
     texture_resolution: i32 = 1024 * 2,
@@ -32,10 +47,6 @@ pub const ShadowMapPass = struct {
         // NOTE: raylib will not throw error if file not exists
         const _shader = try ShadowMap.init();
 
-        // _shader.uniform.light_direction.set(config.light_dir.normalize());
-        // _shader.uniform.light_color.set(rl.colorNormalize(config.light_color));
-        // _shader.uniform.ambient_color.set(rl.colorNormalize(config.ambient_color));
-        // _shader.uniform.depth_texture_size.set(config.texture_resolution);
         _shader.set_uniform(.{
             .light_direction = config.light_dir.normalize(),
             .light_color = rl.colorNormalize(config.light_color),
@@ -74,42 +85,36 @@ pub const ShadowMapPass = struct {
 
         // after draw finished
         // IMPORTANT UPDATE DEPT TEXTURE TO memo shader program
-        self.writeLightMatrix();
-        self.writeDepthTexture();
+        self._shader.set_uniform(.{
+            .light_view_proj = _calcLightViewProjMat(self.light_camera),
+            .depth_target = _bindDepthTexture(self.depth_target.depth),
+        });
 
         self.depth_target.end();
         self.light_camera.end();
     }
 
-    fn writeLightMatrix(self: @This()) void {
-        self.light_camera.begin();
-        defer self.light_camera.end();
+    fn _calcLightViewProjMat(light_camera: rl.Camera3D) rl.Matrix {
+        light_camera.begin();
+        defer light_camera.end();
         const lightView = rl.gl.rlGetMatrixModelview();
         const lightProj = rl.gl.rlGetMatrixProjection();
         const light_view_proj = lightView.multiply(lightProj);
-        // _ = light_view_proj;
-        // DO: glsl(uniform mat4 light_view_proj) -> mat(light_view_proj_mat)
-        // self._shader.uniform.light_view_proj.set(light_view_proj);
-
-        self._shader.set_uniform(.{
-            .light_view_proj = light_view_proj,
-        });
+        return light_view_proj;
     }
 
-    fn writeDepthTexture(self: @This()) void {
+    fn _bindDepthTexture(depht_texture: rl.Texture2D) i32 {
         // ตั้ง state ให้ GPU รู้เรื่อง
         // random unused texture slot
         const SHADOW_TEX_SLOT: i32 = 10; // GL_TEXTURE0 + 10 = GL_TEXTURE10
 
         // DO: *TEXTURE10 = depth_target.depth.id
         rl.gl.rlActiveTextureSlot(SHADOW_TEX_SLOT);
-        rl.gl.rlEnableTexture(self.depth_target.depth.id);
+        rl.gl.rlEnableTexture(depht_texture.id);
 
         // DO: glsl(uniform sampler2D depth_target) -> *TEXTURE10
         // self._shader.uniform.depth_target.set(SHADOW_TEX_SLOT);
-        self._shader.set_uniform(.{
-            .depth_target = SHADOW_TEX_SLOT,
-        });
+        return SHADOW_TEX_SLOT;
     }
 };
 
