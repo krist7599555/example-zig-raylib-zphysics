@@ -55,12 +55,11 @@ pub fn ReplaceValue(comptime T: type, comptime V: type) type {
 }
 
 pub fn ShaderWrapper(
-    comptime vert: [:0]const u8,
-    comptime frag: [:0]const u8,
+    vert: [:0]const u8,
+    frag: [:0]const u8,
     comptime U: type,
 ) type {
     // const all_fields = get_all_fields_str(U);
-    const UU = U;
     return struct {
         shader: rl.Shader,
         uniform_loc: ReplaceValue(U, i32),
@@ -71,17 +70,17 @@ pub fn ShaderWrapper(
             inline for (@typeInfo(U).@"struct".fields) |f| {
                 @field(uniform_loc, f.name) = rl.getShaderLocation(shader, f.name ++ "\x00");
             }
+            // FIX BELOW IS HARD CODED!!!
             if (@hasField(U, "view_position")) {
                 shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.vector_view))] = uniform_loc.view_position;
             }
             if (@hasField(U, "ambient_color")) {
-                shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.vector_view))] = uniform_loc.ambient_color;
+                shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_ambient))] = uniform_loc.ambient_color;
             }
             if (@hasField(U, "diffuse_color")) {
-                shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.vector_view))] = uniform_loc.diffuse_color;
+                shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_diffuse))] = uniform_loc.diffuse_color;
             }
-            // shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_ambient))] = res.uniform.ambient_color.loc;
-            // shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_diffuse))] = res.uniform.diffuse_color.loc;
+
             const res: @This() = .{
                 .shader = shader,
                 .uniform_loc = uniform_loc,
@@ -92,15 +91,16 @@ pub fn ShaderWrapper(
         pub fn set_uniform(self: @This(), data: anytype) void {
             const V = @TypeOf(data);
             inline for (@typeInfo(V).@"struct".fields) |f| {
-                if (@hasField(UU, f.name)) {
-                    const UT = @FieldType(UU, f.name);
+                if (@hasField(U, f.name)) {
+                    const UT = @FieldType(U, f.name);
                     const VT = @FieldType(@TypeOf(data), f.name);
                     if (UT == VT) {
                         const loc = @field(self.uniform_loc, f.name);
                         const val = @field(data, f.name);
+                        std.debug.print("setunform", .{});
                         setUniformValue(UT, self.shader, loc, val);
                     } else {
-                        @compileError("FAIL not equal type");
+                        @compileError("." ++ f.name ++ " Expect Type " ++ @typeName(UT) ++ " Got " ++ @typeName(VT));
                     }
                 } else {
                     @compileError("XX");

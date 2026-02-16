@@ -32,10 +32,16 @@ pub const ShadowMapPass = struct {
         // NOTE: raylib will not throw error if file not exists
         const _shader = try ShadowMap.init();
 
-        _shader.uniform.light_direction.set(config.light_dir.normalize());
-        _shader.uniform.light_color.set(rl.colorNormalize(config.light_color));
-        _shader.uniform.ambient_color.set(rl.colorNormalize(config.ambient_color));
-        _shader.uniform.depth_texture_size.set(config.texture_resolution);
+        // _shader.uniform.light_direction.set(config.light_dir.normalize());
+        // _shader.uniform.light_color.set(rl.colorNormalize(config.light_color));
+        // _shader.uniform.ambient_color.set(rl.colorNormalize(config.ambient_color));
+        // _shader.uniform.depth_texture_size.set(config.texture_resolution);
+        _shader.set_uniform(.{
+            .light_direction = config.light_dir.normalize(),
+            .light_color = rl.colorNormalize(config.light_color),
+            .ambient_color = rl.colorNormalize(config.ambient_color),
+            .depth_texture_size = config.texture_resolution,
+        });
 
         return ShadowMapPass{
             .light_camera = .{
@@ -81,9 +87,15 @@ pub const ShadowMapPass = struct {
         const lightView = rl.gl.rlGetMatrixModelview();
         const lightProj = rl.gl.rlGetMatrixProjection();
         const light_view_proj = lightView.multiply(lightProj);
+        // _ = light_view_proj;
         // DO: glsl(uniform mat4 light_view_proj) -> mat(light_view_proj_mat)
-        self._shader.uniform.light_view_proj.set(light_view_proj);
+        // self._shader.uniform.light_view_proj.set(light_view_proj);
+
+        self._shader.set_uniform(.{
+            .light_view_proj = light_view_proj,
+        });
     }
+
     fn writeDepthTexture(self: @This()) void {
         // ตั้ง state ให้ GPU รู้เรื่อง
         // random unused texture slot
@@ -94,7 +106,10 @@ pub const ShadowMapPass = struct {
         rl.gl.rlEnableTexture(self.depth_target.depth.id);
 
         // DO: glsl(uniform sampler2D depth_target) -> *TEXTURE10
-        self._shader.uniform.depth_target.set(SHADOW_TEX_SLOT);
+        // self._shader.uniform.depth_target.set(SHADOW_TEX_SLOT);
+        self._shader.set_uniform(.{
+            .depth_target = SHADOW_TEX_SLOT,
+        });
     }
 };
 
