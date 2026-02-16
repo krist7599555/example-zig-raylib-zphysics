@@ -26,9 +26,9 @@ pub fn main() !void {
     rl.setTargetFPS(Config.fps);
     defer rl.closeWindow();
 
-    const shadow_pass = try shaders.ShadowMapPass.init(.{
-        .texture_resolution = Config.shadow_map.texture_resolution,
-        .light_dir = rl.Vector3.initVec(Config.shadow_map.light_direction),
+    const shadow_pass = try shaders.Shadow.init(.{
+        .texture_size = Config.shadow_map.texture_size,
+        .light_dir = .initVec(Config.shadow_map.light_direction),
     });
     defer shadow_pass.deinit();
 
@@ -58,27 +58,46 @@ pub fn main() !void {
     for (0..100) |i| {
         // CREATE 100 RANDOM BALL
         const radius = Util.rand_f32(random, 0.2, 2.0);
-        _ = try game.createBody(.{
-            .physic_backend = physic_backend,
-            .game_state = &game_state,
-            .graphic = .{
-                .mesh = unit_sphere_mesh,
-                .shader = shadow_pass.depth_shader,
-                .tint = Util.rand_color(random),
-                .scale = .init(radius, radius, radius),
-            },
-            .physic = .{
-                .shape = try shapes.sphere_shape(radius),
-                .motion_type = .dynamic,
-                .restitution = 0.5, // Coefficient of restitution https://en.wikipedia.org/wiki/Coefficient_of_restitution
-                .position = .{
-                    Util.rand_f32(random, -20, 20),
-                    @as(f32, @floatFromInt(i)) * 4 + 4,
-                    Util.rand_f32(random, -20, 20),
-                    0,
-                },
+
+        const body = try physic_backend.add(.{
+            .shape = try shapes.sphere_shape(radius),
+            .motion_type = .dynamic,
+            .restitution = 0.5, // Coefficient of restitution https://en.wikipedia.org/wiki/Coefficient_of_restitution
+            .position = .{
+                Util.rand_f32(random, -20, 20),
+                @as(f32, @floatFromInt(i)) * 4 + 4,
+                Util.rand_f32(random, -20, 20),
+                0,
             },
         });
+        const model = try rl.loadModelFromMesh(unit_sphere_mesh);
+        try game_state.add(.{
+            .model = injectShader(
+                model,
+                shadow_pass.depth_shader,
+            ),
+            .tint = Util.rand_color(random),
+            .scale = .init(radius, radius, radius),
+            .ref = .{ .body = body },
+        });
+
+        // same api but which is look cooler
+        // _ = try game.createBody(.{
+        //     .physic_backend = physic_backend,
+        //     .game_state = &game_state,
+        //     .graphic = .{},
+        //     .physic = .{
+        //         .shape = try shapes.sphere_shape(radius),
+        //         .motion_type = .dynamic,
+        //         .restitution = 0.5, // Coefficient of restitution https://en.wikipedia.org/wiki/Coefficient_of_restitution
+        //         .position = .{
+        //             Util.rand_f32(random, -20, 20),
+        //             @as(f32, @floatFromInt(i)) * 4 + 4,
+        //             Util.rand_f32(random, -20, 20),
+        //             0,
+        //         },
+        //     },
+        // });
     }
     const unit_box_mesh = shapes.box_mesh(.{ 1, 1, 1 });
     for (0..100) |i| {
@@ -177,4 +196,9 @@ pub fn main() !void {
             }
         }
     }
+}
+
+fn injectShader(model: rl.Model, shader: rl.Shader) rl.Model {
+    model.materials[0].shader = shader;
+    return model;
 }

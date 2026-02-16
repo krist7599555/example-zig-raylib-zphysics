@@ -8,7 +8,7 @@ pub const GameConfig = .{
         .fov = 45,
     },
     .shadow_map = .{
-        .texture_resolution = 1024,
+        .texture_size = 1024,
         .light_direction = @Vector(3, f32){ 10.0, -40.0, 70.0 },
     },
     .random_seed = @as(u64, 12345),

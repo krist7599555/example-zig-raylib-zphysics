@@ -22,14 +22,14 @@ pub const ShadowMap = ShaderWrapper(
 );
 
 const PassConfig = struct {
-    texture_resolution: i32 = 1024 * 2,
+    texture_size: i32 = 1024 * 2,
     light_dir: rl.Vector3 = .init(0.35, -1.0, -0.35),
     light_color: rl.Color = .white,
     ambient_color: rl.Color = .init(2, 2, 2, 255),
     fovy: f32 = 60.0,
 };
 
-pub const ShadowMapPass = struct {
+pub const Shadow = struct {
     light_camera: rl.Camera3D,
     depth_target: rl.RenderTexture2D,
     size: i32,
@@ -43,7 +43,7 @@ pub const ShadowMapPass = struct {
         return self.depth_target.depth;
     }
 
-    pub fn init(config: PassConfig) !ShadowMapPass {
+    pub fn init(config: PassConfig) !@This() {
         // NOTE: raylib will not throw error if file not exists
         const _shader = try ShadowMap.init();
 
@@ -51,10 +51,10 @@ pub const ShadowMapPass = struct {
             .light_direction = config.light_dir.normalize(),
             .light_color = rl.colorNormalize(config.light_color),
             .ambient_color = rl.colorNormalize(config.ambient_color),
-            .depth_texture_size = config.texture_resolution,
+            .depth_texture_size = config.texture_size,
         });
 
-        return ShadowMapPass{
+        return .{
             .light_camera = .{
                 .position = config.light_dir.scale(-15.0),
                 .target = rl.Vector3.zero(),
@@ -62,9 +62,9 @@ pub const ShadowMapPass = struct {
                 .fovy = config.fovy, // Try Change this to fix shadow error (low = no shadow, hi = too dark)
                 .projection = .orthographic,
             },
-            .depth_target = try _createTextureWithDepth(config.texture_resolution),
+            .depth_target = try _createTextureWithDepth(config.texture_size),
             .depth_shader = _shader.shader,
-            .size = config.texture_resolution,
+            .size = config.texture_size,
             ._shader = _shader,
         };
     }
