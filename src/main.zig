@@ -127,7 +127,8 @@ pub fn main() !void {
     });
     try game_state.add(player.enitity);
 
-    physic_backend.optimize();
+    physic_backend.optimize(); // run once after finish added mesh
+
     while (!rl.windowShouldClose()) {
         {
             // UPDATE
@@ -137,9 +138,10 @@ pub fn main() !void {
         }
         {
             // Compute shadowTexture
+            // this will effect every model that use `shadow_pass.shader` as a shader
             shadow_pass.begin_shadow_pass();
-            defer shadow_pass.end_shadow_pass();
             game.draw(&game_state);
+            shadow_pass.end_shadow_pass();
         }
         {
             // DRAW
@@ -165,8 +167,8 @@ pub fn main() !void {
                 y += 25;
                 {
                     depth_visualize_pass.begin_shader();
-                    defer depth_visualize_pass.end_shader();
                     rl.drawTextureEx(shadow_pass.get_texture_depth(), .init(10, @floatFromInt(y)), 0.0, 0.3, .white);
+                    depth_visualize_pass.end_shader();
                 }
                 rl.drawText("Shadow.Depth", 10 + 10, y + 10, 20, rl.Color.white);
                 y += 320;

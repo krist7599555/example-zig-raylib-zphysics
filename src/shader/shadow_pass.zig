@@ -4,7 +4,7 @@ const zphy = @import("zphysics");
 const physic = @import("../physic.zig");
 const Player = @import("../player.zig").PlayerEntity;
 const Util = @import("../util.zig");
-const shaders = @import("../shader/index.zig");
+const ShadowMap = @import("../shader/shadow_map.zig").ShadowMap;
 
 const PassConfig = struct {
     texture_resolution: i32 = 1024 * 2,
@@ -19,7 +19,7 @@ pub const ShadowMapPass = struct {
     depth_target: rl.RenderTexture2D,
     size: i32,
     depth_shader: rl.Shader,
-    _shader: shaders.ShadowMap,
+    _shader: ShadowMap,
 
     pub fn get_texture_rgb(self: @This()) rl.Texture {
         return self.depth_target.texture;
@@ -30,7 +30,7 @@ pub const ShadowMapPass = struct {
 
     pub fn init(config: PassConfig) !ShadowMapPass {
         // NOTE: raylib will not throw error if file not exists
-        const _shader = try shaders.ShadowMap.init();
+        const _shader = try ShadowMap.init();
 
         _shader.uniform.light_direction.set(config.light_dir.normalize());
         _shader.uniform.light_color.set(rl.colorNormalize(config.light_color));
