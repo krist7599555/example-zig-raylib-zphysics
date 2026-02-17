@@ -58,8 +58,8 @@ pub fn ShaderWrapper(
     vert: [:0]const u8,
     frag: [:0]const u8,
     comptime U: type,
+    comptime override_builtin_raylib_name: []const struct { rl.ShaderLocationIndex, []const u8 },
 ) type {
-    // const all_fields = get_all_fields_str(U);
     return struct {
         shader: rl.Shader,
         uniform_loc: ReplaceValue(U, i32),
@@ -68,17 +68,16 @@ pub fn ShaderWrapper(
             const shader = try rl.loadShaderFromMemory(vert, frag);
             var uniform_loc: ReplaceValue(U, i32) = undefined;
             inline for (@typeInfo(U).@"struct".fields) |f| {
-                @field(uniform_loc, f.name) = rl.getShaderLocation(shader, f.name ++ "\x00");
+                const loc = rl.getShaderLocation(shader, f.name);
+                if (loc == -1) {
+                    std.debug.print("WARN: shader.uniform." ++ f.name ++ ".loc = {}\n", .{loc});
+                }
+                @field(uniform_loc, f.name) = loc;
             }
-            // FIX BELOW IS HARD CODED!!!
-            if (@hasField(U, "view_position")) {
-                shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.vector_view))] = uniform_loc.view_position;
-            }
-            if (@hasField(U, "ambient_color")) {
-                shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_ambient))] = uniform_loc.ambient_color;
-            }
-            if (@hasField(U, "diffuse_color")) {
-                shader.locs[@intCast(@intFromEnum(rl.ShaderLocationIndex.color_diffuse))] = uniform_loc.diffuse_color;
+
+            inline for (override_builtin_raylib_name) |p| {
+                shader.locs[@intCast(@intFromEnum(p.@"0"))] =
+                    @field(uniform_loc, p.@"1");
             }
 
             const res: @This() = .{
@@ -97,7 +96,6 @@ pub fn ShaderWrapper(
                     if (UT == VT) {
                         const loc = @field(self.uniform_loc, f.name);
                         const val = @field(data, f.name);
-                        std.debug.print("setunform", .{});
                         setUniformValue(UT, self.shader, loc, val);
                     } else {
                         @compileError("." ++ f.name ++ " Expect Type " ++ @typeName(UT) ++ " Got " ++ @typeName(VT));

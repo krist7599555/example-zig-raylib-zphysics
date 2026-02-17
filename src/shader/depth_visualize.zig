@@ -9,4 +9,7 @@ pub const DepthVisualize = ShaderWrapper(
         depthTex: i32, // sampler2D
         mvp: rl.Matrix, // mat4
     },
+    &.{
+        .{ .matrix_mvp, "mvp" },
+    },
 );

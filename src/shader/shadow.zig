@@ -6,20 +6,29 @@ const Player = @import("../player.zig").PlayerEntity;
 const Util = @import("../util.zig");
 const ShaderWrapper = @import("./uniform_helper.zig").ShaderWrapper;
 
-pub const ShadowMap = ShaderWrapper(
-    @embedFile("./shadow.vert"),
-    @embedFile("./shadow.frag"),
-    struct {
-        diffuse_color: rl.Vector4,
-        light_direction: rl.Vector3,
-        light_color: rl.Vector4,
-        ambient_color: rl.Vector4,
-        view_position: rl.Vector3,
-        light_view_proj: rl.Matrix,
-        depth_texture_size: i32,
-        depth_target: i32,
-    },
-);
+const ShadowMap = ShaderWrapper(@embedFile("./shadow.vert"), @embedFile("./shadow.frag"), struct {
+    diffuse_color: rl.Vector4, // require manual set rl.shader.locs[.diffuse_color]
+    ambient_color: rl.Vector4, // require manual set rl.shader.locs[.color_ambient]
+    view_position: rl.Vector3, // require manual set rl.shader.locs[.vector_view]
+
+    light_direction: rl.Vector3,
+    light_color: rl.Vector4,
+    light_view_proj: rl.Matrix,
+
+    depth_texture_size: i32,
+    depth_target: i32,
+}, &.{
+    .{ .vector_view, "view_position" },
+    .{ .color_ambient, "ambient_color" },
+    .{ .color_diffuse, "diffuse_color" },
+});
+
+const ShadowMapExt = struct {
+    fn init() !ShadowMap {
+        const res = try ShadowMap.init();
+        return res;
+    }
+};
 
 const PassConfig = struct {
     texture_size: i32 = 1024 * 2,
@@ -45,7 +54,7 @@ pub const Shadow = struct {
 
     pub fn init(config: PassConfig) !@This() {
         // NOTE: raylib will not throw error if file not exists
-        const _shader = try ShadowMap.init();
+        const _shader = try ShadowMapExt.init();
 
         _shader.set_uniform(.{
             .light_direction = config.light_dir.normalize(),
