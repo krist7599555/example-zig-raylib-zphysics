@@ -3,7 +3,7 @@
 in vec2 fragTexCoord;
 out vec4 finalColor;
 
-uniform sampler2D depthTex;
+uniform sampler2D depthTex; // if not set deafult to texture0
 
 void main() {
     float d = texture(depthTex, fragTexCoord).r;

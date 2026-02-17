@@ -33,6 +33,9 @@ pub fn main() !void {
     defer shadow_pass.deinit();
 
     const depth_visualize_pass = try shaders.DepthVisualize.init();
+    depth_visualize_pass.set_uniform(.{
+        .depthTex = @as(i32, 0), // use texture from GL_TEXTURE0
+    });
     defer depth_visualize_pass.deinit();
 
     var ground: game.Entity = undefined;
@@ -191,7 +194,14 @@ pub fn main() !void {
                 }
                 rl.drawText("Shadow.Depth", 10 + 10, y + 10, 20, rl.Color.white);
                 y += 320;
-                rl.drawTextureEx(shadow_pass.get_texture_rgb(), .init(10, @floatFromInt(y)), 0.0, 0.3, .white);
+                rl.drawTextureEx(
+                    // always bind ไปที่ GL_TEXTURE0
+                    shadow_pass.get_texture_rgb(),
+                    .init(10, @floatFromInt(y)),
+                    0.0,
+                    0.3,
+                    .white,
+                );
                 rl.drawText("Shadow.Texture", 10 + 10, y + 10, 20, rl.Color.light_gray);
             }
         }
